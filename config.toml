@@ -1,0 +1,17 @@
+[dolphin]
+debug = true
+
+[mode]
+name      = "interval"
+interval  = 10
+intensity = 1
+duration  = 1000
+
+[players.1]
+output_mode = "vibrate"
+
+[players.2]
+output_mode = "vibrate"
+
+[players.3]
+output_mode = "disabled"

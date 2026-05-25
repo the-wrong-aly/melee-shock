@@ -13,7 +13,7 @@ Real-time haptic feedback for Super Smash Bros. Melee. Monitors live game state 
 ## Requirements
 
 - Python 3.11+
-- [Dolphin emulator](https://dolphin-emu.org) with a Melee ISO
+- [Slippi Dolphin](https://slippi.gg/) with a Melee ISO
 - A PiShock hub connected via USB serial
 
 ## Installation

@@ -68,7 +68,9 @@ def main():
             iso_path=cfg.iso_path,
             debug=cfg.debug,
         )
-        engine = Engine(source, players, api)
+        engine = Engine(
+            source, players, api, global_max_intensity=cfg.global_max_intensity
+        )
     except (ValueError, RuntimeError) as e:
         logger.error("Setup error: %s", e)
         sys.exit(1)

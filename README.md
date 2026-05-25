@@ -27,6 +27,8 @@ pip install -e .
 Copy `config.toml` and edit it for your setup:
 
 ```toml
+global_max_intensity = 10
+
 [dolphin]
 path = "path/to/Slippi"
 iso = "path/to/meleeiso"
@@ -43,6 +45,12 @@ output_mode = "shock"
 port = 2
 output_mode = "vibrate"
 ```
+
+**Top-level parameters:**
+
+| Parameter | Description |
+|---|---|
+| `global_max_intensity` | Hard cap on intensity sent to any output, regardless of mode settings (0–100) |
 
 **Output modes:**
 

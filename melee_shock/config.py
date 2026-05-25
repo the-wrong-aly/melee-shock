@@ -27,6 +27,7 @@ class Config(BaseModel):
     dolphin_path: Path | None = None
     iso_path: Path | None = None
     debug: bool
+    global_max_intensity: int | None = None
     players: dict[int, PlayerConfig]
 
     model_config = {"arbitrary_types_allowed": True}
@@ -79,5 +80,6 @@ def load(path: Path = Path("config.toml")) -> Config:
         dolphin_path=Path(raw["dolphin"]["path"]) if "path" in raw["dolphin"] else None,
         iso_path=Path(raw["dolphin"]["iso"]) if "iso" in raw["dolphin"] else None,
         debug=raw["dolphin"].get("debug", False),
+        global_max_intensity=raw.get("global_max_intensity"),
         players=players,
     )

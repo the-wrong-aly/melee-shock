@@ -27,10 +27,12 @@ class Engine:
         source: BaseSource,
         players: dict[int, Player],
         api: BaseAPI,
+        global_max_intensity: int | None = None,
     ):
         self.source = source
         self.players = players
         self.api = api
+        self.global_max_intensity = global_max_intensity
 
         self._running = False
         self._thread: threading.Thread | None = None
@@ -128,10 +130,20 @@ class Engine:
                     continue
 
                 try:
+                    # final safety clamp on intensity before sending to API
+                    intensity = event.intensity
+                    if self.global_max_intensity is not None:
+                        clamped = min(intensity, self.global_max_intensity)
+                        if clamped < intensity:
+                            logger.debug(
+                                f"Intensity clamped by global_max_intensity: {intensity} -> {clamped}"
+                            )
+                        intensity = clamped
+
                     if player.output_mode == OutputMode.VIBRATE:
-                        self.api.vibrate(port, event.intensity, event.duration)
+                        self.api.vibrate(port, intensity, event.duration)
                     elif player.output_mode == OutputMode.SHOCK:
-                        self.api.shock(port, event.intensity, event.duration)
+                        self.api.shock(port, intensity, event.duration)
                 except Exception:
                     logger.exception("Shock failed for player %d", port)
 

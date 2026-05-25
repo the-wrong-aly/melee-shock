@@ -89,6 +89,10 @@ class Engine:
             self.mode = EngineMode.ON
             logger.info("New game detected, resetting engine mode to ON")
 
+            for player in self.players.values():
+                if player.mode is not None:
+                    player.mode._new_game()
+
         if self.mode == EngineMode.ON:
             kill_pressed = any(
                 (ps := state.players.get(port)) is not None
@@ -105,7 +109,12 @@ class Engine:
 
         for port, player in self.players.items():
             player_state = state.players.get(port)
-            if player_state and player_state.controller_state.button[PING_BUTTON]:
+            # player_state is None when it is in the config but not in game
+            if player_state is None:
+                continue
+
+            # ping button is handled for all players, even if their output mode is disabled
+            if player_state.controller_state.button[PING_BUTTON]:
                 logger.info(f"Ping button pressed, beeping player {port}")
                 self.api.beep(port, duration=500)
 

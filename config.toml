@@ -2,16 +2,11 @@
 debug = true
 
 [mode]
-name      = "interval"
-interval  = 10
-intensity = 1
-duration  = 1000
+name      = "damage"
+max_intensity = 1
 
 [players.1]
-output_mode = "vibrate"
+output_mode = "disabled"
 
 [players.2]
 output_mode = "vibrate"
-
-[players.3]
-output_mode = "disabled"

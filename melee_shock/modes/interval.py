@@ -18,16 +18,19 @@ class IntervalMode(BaseMode):
         duration: int
 
     def __init__(self, cfg: Config):
+        super().__init__()
+
         self.cfg = cfg
         self._interval_frames = cfg.interval * 60
 
+    def _new_game(self):
         self._last_shock_frame = None
 
     def update(self, port: int, gamestate: GameState) -> ShockEvent | None:
         frame = gamestate.frame
 
         # wait `_interval_frames` frames before initial shock
-        if self._last_shock_frame is None or frame < self._last_shock_frame:
+        if self._last_shock_frame is None:
             self._last_shock_frame = frame
             return None
 

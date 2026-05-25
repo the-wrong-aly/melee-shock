@@ -10,6 +10,13 @@ class ShockEvent:
 
 
 class BaseMode(ABC):
+    def __init__(self):
+        self._new_game()
+
+    @abstractmethod
+    def _new_game(self):
+        pass
+
     @abstractmethod
     def update(self, gamestate: GameState) -> ShockEvent | None:
         pass

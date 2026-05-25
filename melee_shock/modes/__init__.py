@@ -1,1 +1,1 @@
-from melee_shock.modes import interval  # noqa: F401
+from melee_shock.modes import damage, interval  # noqa: F401

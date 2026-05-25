@@ -6,6 +6,7 @@ Real-time haptic feedback for Super Smash Bros. Melee. Monitors live game state 
 
 - **Damage mode** — triggers feedback when your character takes damage; intensity scales with damage dealt, duration matches hitstun frames
 - **Interval mode** — triggers feedback on a fixed time interval
+- **Action mode** — triggers feedback when your character enters a specific action state (e.g. shielding, grabbing)
 - **Per-player configuration** — each player slot can have its own mode and output type
 - **Output modes** — `vibrate`, `shock`, or `disabled` per player
 - **In-game controls** — D-Pad Left kills the shock switch; D-Pad Right sends a ping
@@ -34,15 +35,13 @@ path = "path/to/Slippi"
 iso = "path/to/meleeiso"
 
 [mode]
-type = "damage"
+name      = "damage"
 max_intensity = 1
 
-[[players]]
-port = 1
+[players.1]
 output_mode = "shock"
 
-[[players]]
-port = 2
+[players.2]
 output_mode = "vibrate"
 ```
 
@@ -62,12 +61,30 @@ output_mode = "vibrate"
 
 **Built-in modes:**
 
-| Mode | Description |
-|---|---|
-| `damage` | Fires on hit; intensity/duration scale with damage and hitstun |
-| `interval` | Fires every N seconds |
+**`damage`** — Fires on hit; intensity scales with damage dealt, duration matches hitstun.
 
-Each player can override the global mode with a `[mode]` block inside their `[[players]]` entry.
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `max_intensity` | int | — | Maximum intensity (scales with damage) |
+| `min_duration` | float | `0.05` | Minimum duration in seconds |
+
+**`interval`** — Fires on a fixed frame interval.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `interval` | float | — | Seconds between shocks |
+| `intensity` | int | — | Fixed intensity |
+| `duration` | float | — | Duration in seconds |
+
+**`action`** — Fires when your character enters a specific action state.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `action` | str | — | Action state name (e.g. `"SHIELD"`, `"GRAB"`) — must match a [`melee.Action`](https://py-slippi.readthedocs.io/en/latest/source/melee.html#melee.enums.Action) enum value |
+| `intensity` | int | — | Fixed intensity |
+| `do_while` | bool | `false` | If `true`, shocks continuously while the action is held; if `false`, shocks once on entry |
+
+Each player can override the global mode with a `[mode]` block inside their `[players.N]` entry.
 
 ## Usage
 

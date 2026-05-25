@@ -18,7 +18,7 @@ class DamageMode(BaseMode):
     class Config(BaseModel):
         name: str = "damage"
         max_intensity: int
-        min_duration: int = 50
+        min_duration: float = 0.05
 
     def __init__(self, cfg: Config):
         super().__init__()
@@ -48,7 +48,7 @@ class DamageMode(BaseMode):
                 ),
             )
             duration = max(
-                self.cfg.min_duration, player_state.hitstun_frames_left * 1000 // 60
+                int(self.cfg.min_duration * 1000), player_state.hitstun_frames_left * 1000 // 60
             )
             self._current_percent = percent
             return ShockEvent(duration=duration, intensity=intensity)

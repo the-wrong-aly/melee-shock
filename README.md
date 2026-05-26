@@ -6,12 +6,12 @@ Real-time haptic feedback for Super Smash Bros. Melee. Monitors live game state 
 
 ## Features
 
-- **Damage mode** — triggers feedback when your character takes damage; intensity scales with damage dealt, duration matches hitstun frames
-- **Interval mode** — triggers feedback on a fixed time interval
-- **Action mode** — triggers feedback when your character enters a specific action state (e.g. shielding, grabbing)
-- **Per-player configuration** — each player slot can have its own mode and output type
-- **Output modes** — `vibrate`, `shock`, or `disabled` per player
-- **In-game controls** — D-Pad Left kills the shock switch; D-Pad Right sends a ping
+- **Damage mode** - triggers feedback when your character takes damage; intensity scales with damage dealt, duration matches hitstun frames
+- **Interval mode** - triggers feedback on a fixed time interval
+- **Action mode** - triggers feedback when your character enters a specific action state (e.g. shielding, grabbing)
+- **Per-player configuration** - each player slot can have its own mode and output type
+- **Output modes** - `vibrate`, `shock`, or `disabled` per player
+- **In-game controls** - D-Pad Left kills the shock switch; D-Pad Right sends a ping
 
 ## Requirements
 
@@ -63,14 +63,14 @@ output_mode = "vibrate"
 
 **Built-in modes:**
 
-**`damage`** — Fires on hit; intensity scales with damage dealt, duration matches hitstun.
+**`damage`** - Fires on hit; intensity scales with damage dealt, duration matches hitstun.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `max_intensity` | int | — | Maximum intensity (scales with damage) |
 | `min_duration` | float | `0.05` | Minimum duration in seconds |
 
-**`interval`** — Fires on a fixed frame interval.
+**`interval`** - Fires on a fixed frame interval.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -78,7 +78,7 @@ output_mode = "vibrate"
 | `intensity` | int | — | Fixed intensity |
 | `duration` | float | — | Duration in seconds |
 
-**`action`** — Fires when your character enters a specific action state.
+**`action`** - Fires when your character enters a specific action state.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -248,6 +248,10 @@ melee_shock/
 - [ ] Wii console support
 - [ ] Charge meter mode
 - [ ] Better support for online opponents
+
+## Thanks
+
+- **Michael** - testing online play
 
 ## License
 

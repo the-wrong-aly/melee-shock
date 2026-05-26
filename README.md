@@ -242,6 +242,13 @@ melee_shock/
 └── sources/         # Game state providers (Dolphin)
 ```
 
+## TODO
+
+- [ ] Desktop GUI
+- [ ] Wii console support
+- [ ] Charge meter mode
+- [ ] Better support for online opponents
+
 ## License
 
 See [LICENSE](LICENSE).

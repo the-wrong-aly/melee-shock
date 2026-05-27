@@ -2,15 +2,15 @@
 
 *Hi! Is the pain of playing melee not enough for you? Do you need more motivation to play better? Have you ever wanted to feel like Ash and his greninja from the Pokemon anime? Well this is for you!*
 
-Real-time haptic feedback for Super Smash Bros. Melee. Monitors live game state from Dolphin and triggers physical feedback on a connected [PiShock](https://pishock.com) hub when in-game events occur. Feedback can be either vibration or electrical.
+Real-time haptic feedback for Super Smash Bros. Melee. Monitors live game state from Dolphin and triggers physical feedback on a connected [PiShock](https://pishock.com) hub when in-game events occur. Feedback can be either vibration or electric.
 
 **Please read the *Online Play* section below if looking to play online.**
 
 ## Safety
 
 - Always follow [PiShock's safety guidelines](https://pishock.com). Do not use around the neck, spine, or chest. Do not use with any heart conditions.
-- `melee-shock` is not responsible by any harm caused by misuse of the PiShock device 
-- Set `global_max_intensity` to a conservative value before your first session
+- `melee-shock` is not responsible for any harm caused by misuse of the PiShock device
+- Set max intensity to a conservative value before your first session
 - The in-game kill switch (D-Pad Left) immediately stops output
 
 ## Features
@@ -24,88 +24,54 @@ Real-time haptic feedback for Super Smash Bros. Melee. Monitors live game state 
 
 ## Requirements
 
-- Python 3.11+
 - [Slippi Dolphin](https://slippi.gg/) with a Melee ISO
 - A PiShock hub connected via USB
-
-## Installation
-
-```bash
-uv sync
-# or
-pip install -e .
-```
-
-## Configuration
-
-Copy `config.toml` and edit it for your setup:
-
-```toml
-global_max_intensity = 10
-
-[dolphin]
-path = "path/to/Slippi"
-iso = "path/to/meleeiso"
-
-[mode]
-name      = "damage"
-max_intensity = 1
-
-[players.1]
-output_mode = "shock"
-
-[players.2]
-output_mode = "vibrate"
-```
-
-**Top-level parameters:**
-
-| Parameter | Description |
-|---|---|
-| `global_max_intensity` | Hard cap on intensity sent to any output, regardless of mode settings (0-100) |
-
-**Output modes:**
-
-| Value | Effect |
-|---|---|
-| `shock` | Electrical stimulation |
-| `vibrate` | Vibration only |
-| `disabled` | No output |
-
-**Built-in modes:**
-
-**`damage`** - Fires on hit; intensity scales with damage dealt, duration matches hitstun.
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `max_intensity` | int | — | Maximum intensity (scales with damage) |
-| `min_duration` | float | `0.05` | Minimum duration in seconds |
-
-**`interval`** - Fires on a fixed frame interval.
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `interval` | float | — | Seconds between shocks |
-| `intensity` | int | — | Fixed intensity |
-| `duration` | float | — | Duration in seconds |
-
-**`action`** - Fires when your character enters a specific action state.
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `action` | str or list[str] | — | Action state name(s) (e.g. `"SHIELD"` or `["SHIELD", "GRAB"]`). Must match [`melee.Action`](https://libmelee.readthedocs.io/en/latest/enums.html) enum values |
-| `intensity` | int | — | Fixed intensity |
-| `do_while` | bool | `false` | If `true`, shocks continuously while the action is held; if `false`, shocks once on entry |
-
-Each player can override the global mode with a `[mode]` block inside their `[players.N]` entry.
 
 ## Download
 
 Pre-built Windows executables are available on the [Releases](../../releases) page. Download the latest zip, extract it, and run `melee-shock.exe`.
 
+## Usage
+
+On first launch, configure your setup in the **Settings** tab:
+
+- **Dolphin** - path to your Slippi installation and Melee ISO
+- **Global** - set a max intensity (start low) and a default mode with its parameters
+- **P1–P4** - set each player's output type (`shock`, `vibrate`, or `disabled`); optionally override the mode per player
+- **Shockers** - appears after connecting; use the Beep / Vibrate / Shock buttons to test each shocker
+
+Hit **Save** to write your settings to a config file, then **Connect & Start**. melee-shock will connect to a running Dolphin or launch it automatically.
+
+All settings are locked while running. Hit **Stop** to end the session.
+
+## Modes
+
+**`damage`** - Fires on hit. Intensity scales with the damage dealt; duration matches hitstun.
+
+| Parameter | Description |
+|---|---|
+| Max intensity | Upper bound on intensity (actual value scales with damage) |
+| Min duration | Minimum shock duration in seconds |
+
+**`interval`** - Fires on a fixed timer, regardless of what's happening in game.
+
+| Parameter | Description |
+|---|---|
+| Interval | Seconds between shocks |
+| Intensity | Fixed intensity (0-100) |
+| Duration | Shock duration in seconds |
+
+**`action`** - Fires when your character enters a specific action state.
+
+| Parameter | Description |
+|---|---|
+| Action(s) | Action state name(s) from [`melee.Action`](https://libmelee.readthedocs.io/en/latest/enums.html) (e.g. `SHIELD`, `GRAB`) - comma-separated in the GUI |
+| Intensity | Fixed intensity (0-100) |
+| Repeat while held | If enabled, shocks continuously while the action is active; otherwise shocks once on entry |
+
 ## Online Play
 
-**Your personal shock settings will always be [players.1] in the config.**
+**Your online personal shock settings will always be P1.**
 
 To use melee-shock during online matches, you must enable the following gecko code in Dolphin:
 
@@ -235,37 +201,73 @@ B1030001 3C80804A
 60000000 00000000
 ```
 
-This code enables us to read menu info correctly determine your ingame port.
+This code lets melee-shock correctly determine your in-game port during online matches.
 
 To enable it: open Dolphin, right-click your Melee ISO, select **Properties → Gecko Codes**, and check the box next to the code. If it isn't listed, click **Show Defaults** and paste the code in manually.
 
-## Project Structure
+## Advanced
 
-```
-melee_shock/
-├── engine.py        # Main event loop
-├── config.py        # Config loading
-├── models.py        # Shared data models
-├── apis/            # Shock hardware backends (PiShock serial)
-├── modes/           # Shock trigger logic (damage, interval)
-└── sources/         # Game state providers (Dolphin)
+<details>
+<summary>Config file reference</summary>
+
+The GUI saves settings to a `.toml` file which can also be edited directly.
+
+```toml
+global_max_intensity = 10
+
+[dolphin]
+path = "path/to/Slippi"
+iso = "path/to/melee.iso"
+debug = false
+
+[mode]
+name = "damage"
+max_intensity = 50
+min_duration = 0.05
+
+[players.1]
+output_mode = "shock"
+
+[players.2]
+output_mode = "vibrate"
+
+[players.2.mode]
+name = "interval"
+interval = 5.0
+intensity = 30
+duration = 0.3
 ```
 
-## Usage
+</details>
+
+<details>
+<summary>Running from source</summary>
 
 ```bash
+uv sync
+# or
+pip install -e .
+
+python gui.py
+# or (CLI)
 python main.py --config config.toml
 ```
 
-## Building
+</details>
+
+<details>
+<summary>Building an exe</summary>
 
 ```bash
 pyinstaller --windowed --name melee-shock --icon assets/icon.ico --collect-all customtkinter --collect-all melee gui.py
 ```
 
+Output in `dist/melee-shock/`.
+
+</details>
+
 ## TODO
 
-- [x] Desktop GUI
 - [ ] Wii console support
 - [ ] Charge meter mode
 - [ ] Better support for online opponents

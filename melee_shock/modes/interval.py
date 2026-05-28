@@ -15,7 +15,7 @@ class IntervalMode(BaseMode):
         name: str = "interval"
         interval: float
         intensity: int
-        duration: float
+        duration: float = 0.01
 
     def __init__(self, cfg: Config):
         super().__init__()

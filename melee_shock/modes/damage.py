@@ -18,7 +18,7 @@ class DamageMode(BaseMode):
     class Config(BaseModel):
         name: str = "damage"
         max_intensity: int
-        min_duration: float = 0.05
+        min_duration: float = 0
 
     def __init__(self, cfg: Config):
         super().__init__()

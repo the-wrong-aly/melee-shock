@@ -25,22 +25,23 @@ OUTPUT_MODES = ["shock", "vibrate", "disabled"]
 MODE_NAMES = ["damage", "interval", "action"]
 PLAYER_MODE_OPTIONS = ["global"] + MODE_NAMES  # "global" = inherit from global section
 
-# (key, label, type)  types: "intensity" | "int" | "float" | "str" | "bool"
+# (key, label, type, default)  types: "intensity" | "int" | "float" | "str" | "bool"
 # "intensity" renders as a 0-100 slider; behaves as int for save/load
-MODE_FIELDS: dict[str, list[tuple[str, str, str]]] = {
+# default is the placeholder shown when field is empty (None = no placeholder)
+MODE_FIELDS: dict[str, list[tuple[str, str, str, str | None]]] = {
     "damage": [
-        ("max_intensity", "Max intensity", "intensity"),
-        ("min_duration", "Min duration (s)", "float"),
+        ("max_intensity", "Max intensity", "intensity", None),
+        ("min_duration", "Min duration (s)", "float", "0"),
     ],
     "interval": [
-        ("interval", "Interval (s)", "float"),
-        ("intensity", "Intensity", "intensity"),
-        ("duration", "Duration (s)", "float"),
+        ("interval", "Interval (s)", "float", None),
+        ("intensity", "Intensity", "intensity", None),
+        ("duration", "Duration (s)", "float", "0.1"),
     ],
     "action": [
-        ("action", "Action(s)", "str"),
-        ("intensity", "Intensity", "intensity"),
-        ("do_while", "Repeat while held", "bool"),
+        ("action", "Action(s)", "str", None),
+        ("intensity", "Intensity", "intensity", None),
+        ("do_while", "Repeat while held", "bool", None),
     ],
 }
 
@@ -372,7 +373,7 @@ class App(ctk.CTk):
         for w in self._mode_params_frame.winfo_children():
             w.destroy()
         self._mode_param_vars.clear()
-        for i, (key, label, typ) in enumerate(MODE_FIELDS[mode_name]):
+        for i, (key, label, typ, default) in enumerate(MODE_FIELDS[mode_name]):
             ctk.CTkLabel(self._mode_params_frame, text=label).grid(
                 row=i, column=0, sticky="w", padx=(36, 8), pady=2
             )
@@ -403,7 +404,7 @@ class App(ctk.CTk):
                     variable=var,
                 )
             else:
-                var = tk.StringVar()
+                var = tk.StringVar(value=default if default is not None else "")
                 widget = ctk.CTkEntry(
                     self._mode_params_frame, textvariable=var, width=160
                 )
@@ -421,7 +422,7 @@ class App(ctk.CTk):
         for w in frame.winfo_children():
             w.destroy()
         self._player_mode_param_vars[port].clear()
-        for i, (key, label, typ) in enumerate(MODE_FIELDS[mode_name]):
+        for i, (key, label, typ, default) in enumerate(MODE_FIELDS[mode_name]):
             ctk.CTkLabel(frame, text=label).grid(
                 row=i, column=0, sticky="w", padx=(48, 8), pady=2
             )
@@ -446,7 +447,7 @@ class App(ctk.CTk):
                     frame, from_=0, to=100, number_of_steps=100, variable=var
                 )
             else:
-                var = tk.StringVar()
+                var = tk.StringVar(value=default if default is not None else "")
                 widget = ctk.CTkEntry(frame, textvariable=var, width=160)
             widget.grid(row=i, column=1, sticky="ew", padx=4, pady=2)
             self._player_param_lockable[port].append(widget)
@@ -479,7 +480,7 @@ class App(ctk.CTk):
         mode_name = self._mode_var.get()
         mode_cls, config_cls = get_mode(mode_name)
         params: dict = {"name": mode_name}
-        for key, _, typ in MODE_FIELDS[mode_name]:
+        for key, _, typ, _ in MODE_FIELDS[mode_name]:
             var = self._mode_param_vars.get(key)
             if var is None:
                 continue
@@ -507,7 +508,7 @@ class App(ctk.CTk):
             return self._make_global_mode()
         mode_cls, config_cls = get_mode(mode_name)
         params: dict = {"name": mode_name}
-        for key, _, typ in MODE_FIELDS[mode_name]:
+        for key, _, typ, _ in MODE_FIELDS[mode_name]:
             var = self._player_mode_param_vars[port].get(key)
             if var is None:
                 continue
@@ -624,7 +625,7 @@ class App(ctk.CTk):
         mode_name: str,
         vars_dict: dict[str, tk.Variable],
     ) -> None:
-        for key, _, typ in MODE_FIELDS.get(mode_name, []):
+        for key, _, typ, _ in MODE_FIELDS.get(mode_name, []):
             val = mode_raw.get(key)
             if val is None:
                 continue
@@ -689,7 +690,7 @@ class App(ctk.CTk):
         self, mode_name: str, vars_dict: dict[str, tk.Variable]
     ) -> list[str]:
         lines: list[str] = []
-        for key, _, typ in MODE_FIELDS[mode_name]:
+        for key, _, typ, _ in MODE_FIELDS[mode_name]:
             var = vars_dict.get(key)
             if var is None:
                 continue

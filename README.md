@@ -35,7 +35,7 @@ Pre-built Windows executables are available on the [Releases](../../releases) pa
 
 On first launch, configure your setup in the **Settings** tab:
 
-- **Dolphin** - path to your Slippi installation and Melee ISO
+- **Dolphin** - path to your Slippi installation and Melee ISO (should be able to leave empty)
 - **Global** - set a max intensity (start low) and a default mode with its parameters
 - **P1–P4** - set each player's output type (`shock`, `vibrate`, or `disabled`); optionally override the mode per player
 - **Shockers** - appears after connecting; use the Beep / Vibrate / Shock buttons to test each shocker
@@ -51,7 +51,7 @@ All settings are locked while running. Hit **Stop** to end the session.
 | Parameter | Description |
 |---|---|
 | Max intensity | Upper bound on intensity (actual value scales with damage) |
-| Min duration | Minimum shock duration in seconds |
+| Min duration | Minimum shock duration in seconds, set this to get shocked for things that cause damage but no hitstun |
 
 **`interval`** - Fires on a fixed timer, regardless of what's happening in game.
 

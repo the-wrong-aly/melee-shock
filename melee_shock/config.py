@@ -5,6 +5,7 @@ from melee_shock.modes.registry import get as get_mode
 
 
 VALID_OUTPUT_MODES = ("shock", "vibrate", "disabled")
+VALID_SOURCES = ("dolphin", "wii")
 
 
 class PlayerConfig(BaseModel):
@@ -24,13 +25,25 @@ class PlayerConfig(BaseModel):
 
 
 class Config(BaseModel):
+    source: str = "dolphin"
+    # dolphin-specific
     dolphin_path: Path | None = None
     iso_path: Path | None = None
-    debug: bool
+    # wii-specific
+    wii_ip: str | None = None
+    wii_port: int = 51441
+    debug: bool = False
     global_max_intensity: int | None = None
     players: dict[int, PlayerConfig]
 
     model_config = {"arbitrary_types_allowed": True}
+
+    @field_validator("source")
+    @classmethod
+    def valid_source(cls, v):
+        if v not in VALID_SOURCES:
+            raise ValueError(f"source.type must be one of {VALID_SOURCES}, got {v!r}")
+        return v
 
 
 def _resolve_mode(mode_raw: dict) -> object:
@@ -76,10 +89,16 @@ def load(path: Path = Path("config.toml")) -> Config:
     if not players:
         raise ValueError("At least one player must be defined under [players]")
 
+    src = raw.get("source", {})
+    source_type = src.get("type", "dolphin")
+
     return Config(
-        dolphin_path=Path(raw["dolphin"]["path"]) if "path" in raw["dolphin"] else None,
-        iso_path=Path(raw["dolphin"]["iso"]) if "iso" in raw["dolphin"] else None,
-        debug=raw["dolphin"].get("debug", False),
+        source=source_type,
+        dolphin_path=Path(src["path"]) if "path" in src else None,
+        iso_path=Path(src["iso"]) if "iso" in src else None,
+        wii_ip=src.get("ip"),
+        wii_port=src.get("port", 51441),
+        debug=src.get("debug", False),
         global_max_intensity=raw.get("global_max_intensity"),
         players=players,
     )

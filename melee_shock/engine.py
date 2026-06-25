@@ -82,8 +82,6 @@ class Engine:
             except Exception:
                 logger.info("Source disconnected, stopping")
                 break
-            if state is None:
-                break
             try:
                 self._tick(state)
             except Exception:

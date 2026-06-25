@@ -1,6 +1,8 @@
 global_max_intensity = 10
 
-[dolphin]
+[source]
+type = "wii"
+ip = "192.168.137.140"
 debug = true
 
 [mode]

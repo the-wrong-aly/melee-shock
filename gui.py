@@ -17,6 +17,7 @@ from melee_shock.engine import Engine
 from melee_shock.models import OutputMode, Player
 from melee_shock.modes.registry import get as get_mode
 from melee_shock.sources.dolphin import DolphinSource
+from melee_shock.sources.wii import WiiSource
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -65,7 +66,7 @@ class App(ctk.CTk):
         self.resizable(True, True)
 
         self._engine: Engine | None = None
-        self._source: DolphinSource | None = None
+        self._source: DolphinSource | WiiSource | None = None
         self._log_q: queue.Queue = queue.Queue()
         self._worker: threading.Thread | None = None
         self._lockable: list = []
@@ -160,46 +161,89 @@ class App(ctk.CTk):
 
         r = 0
 
-        # Dolphin
-        ctk.CTkLabel(scroll, text="Dolphin", font=ctk.CTkFont(weight="bold")).grid(
+        # Source
+        ctk.CTkLabel(scroll, text="Source", font=ctk.CTkFont(weight="bold")).grid(
             row=r, column=0, columnspan=3, sticky="w", padx=8, pady=(8, 2)
         )
         r += 1
 
-        ctk.CTkLabel(scroll, text="Path").grid(
+        ctk.CTkLabel(scroll, text="Type").grid(
             row=r, column=0, sticky="w", padx=(20, 8), pady=3
         )
-        self._dolphin_path_var = tk.StringVar()
-        self._lw(ctk.CTkEntry(scroll, textvariable=self._dolphin_path_var)).grid(
-            row=r, column=1, sticky="ew", padx=4, pady=3
+        self._source_var = tk.StringVar(value="dolphin")
+        self._lw(
+            ctk.CTkOptionMenu(
+                scroll,
+                variable=self._source_var,
+                values=["dolphin", "wii"],
+                width=120,
+                command=self._on_source_changed,
+            )
+        ).grid(row=r, column=1, sticky="w", padx=4, pady=3)
+        r += 1
+
+        # Dolphin sub-fields
+        self._dolphin_frame = ctk.CTkFrame(scroll, fg_color="transparent")
+        self._dolphin_frame.grid(row=r, column=0, columnspan=3, sticky="ew")
+        self._dolphin_frame.grid_columnconfigure(1, weight=1)
+        r += 1
+
+        ctk.CTkLabel(self._dolphin_frame, text="Path").grid(
+            row=0, column=0, sticky="w", padx=(20, 8), pady=3
         )
+        self._dolphin_path_var = tk.StringVar()
+        self._lw(
+            ctk.CTkEntry(self._dolphin_frame, textvariable=self._dolphin_path_var)
+        ).grid(row=0, column=1, sticky="ew", padx=4, pady=3)
         self._lw(
             ctk.CTkButton(
-                scroll,
+                self._dolphin_frame,
                 text="…",
                 width=32,
                 command=lambda: self._pick_dir(self._dolphin_path_var),
             )
-        ).grid(row=r, column=2, padx=(4, 8), pady=3)
-        r += 1
+        ).grid(row=0, column=2, padx=(4, 8), pady=3)
 
-        ctk.CTkLabel(scroll, text="ISO").grid(
-            row=r, column=0, sticky="w", padx=(20, 8), pady=3
+        ctk.CTkLabel(self._dolphin_frame, text="ISO").grid(
+            row=1, column=0, sticky="w", padx=(20, 8), pady=3
         )
         self._iso_path_var = tk.StringVar()
-        self._lw(ctk.CTkEntry(scroll, textvariable=self._iso_path_var)).grid(
-            row=r, column=1, sticky="ew", padx=4, pady=3
-        )
+        self._lw(
+            ctk.CTkEntry(self._dolphin_frame, textvariable=self._iso_path_var)
+        ).grid(row=1, column=1, sticky="ew", padx=4, pady=3)
         self._lw(
             ctk.CTkButton(
-                scroll,
+                self._dolphin_frame,
                 text="…",
                 width=32,
                 command=lambda: self._pick_file(self._iso_path_var),
             )
-        ).grid(row=r, column=2, padx=(4, 8), pady=3)
+        ).grid(row=1, column=2, padx=(4, 8), pady=3)
+
+        # Wii sub-fields
+        self._wii_frame = ctk.CTkFrame(scroll, fg_color="transparent")
+        self._wii_frame.grid(row=r, column=0, columnspan=3, sticky="ew")
+        self._wii_frame.grid_columnconfigure(1, weight=1)
+        self._wii_frame.grid_remove()
         r += 1
 
+        ctk.CTkLabel(self._wii_frame, text="IP").grid(
+            row=0, column=0, sticky="w", padx=(20, 8), pady=3
+        )
+        self._wii_ip_var = tk.StringVar()
+        self._lw(ctk.CTkEntry(self._wii_frame, textvariable=self._wii_ip_var)).grid(
+            row=0, column=1, sticky="ew", padx=4, pady=3
+        )
+
+        ctk.CTkLabel(self._wii_frame, text="Port").grid(
+            row=1, column=0, sticky="w", padx=(20, 8), pady=3
+        )
+        self._wii_port_var = tk.StringVar(value="51441")
+        self._lw(
+            ctk.CTkEntry(self._wii_frame, textvariable=self._wii_port_var, width=100)
+        ).grid(row=1, column=1, sticky="w", padx=4, pady=3)
+
+        # Debug (applies to both sources)
         ctk.CTkLabel(scroll, text="Debug").grid(
             row=r, column=0, sticky="w", padx=(20, 8), pady=3
         )
@@ -343,6 +387,14 @@ class App(ctk.CTk):
         self._shockers_placeholder.grid(
             row=0, column=0, sticky="w", padx=(20, 8), pady=4
         )
+
+    def _on_source_changed(self, source_type: str) -> None:
+        if source_type == "dolphin":
+            self._dolphin_frame.grid()
+            self._wii_frame.grid_remove()
+        else:
+            self._dolphin_frame.grid_remove()
+            self._wii_frame.grid()
 
     def _build_log_tab(self, parent: ctk.CTkFrame) -> None:
         parent.grid_rowconfigure(0, weight=1)
@@ -579,8 +631,13 @@ class App(ctk.CTk):
 
         logging.getLogger().setLevel(logging.DEBUG if cfg.debug else logging.INFO)
 
+        self._source_var.set(cfg.source)
+        self._on_source_changed(cfg.source)
+
         self._dolphin_path_var.set(str(cfg.dolphin_path) if cfg.dolphin_path else "")
         self._iso_path_var.set(str(cfg.iso_path) if cfg.iso_path else "")
+        self._wii_ip_var.set(cfg.wii_ip or "")
+        self._wii_port_var.set(str(cfg.wii_port))
         self._debug_var.set(cfg.debug)
         self._intensity_var.set(
             cfg.global_max_intensity if cfg.global_max_intensity is not None else 0
@@ -655,13 +712,23 @@ class App(ctk.CTk):
         gmax = self._intensity_var.get()
         lines += [f"global_max_intensity = {gmax}", ""]
 
-        lines.append("[dolphin]")
-        dp = self._dolphin_path_var.get().strip()
-        if dp:
-            lines.append(f'path = "{dp}"')
-        ip = self._iso_path_var.get().strip()
-        if ip:
-            lines.append(f'iso = "{ip}"')
+        source_type = self._source_var.get()
+        lines.append("[source]")
+        lines.append(f'type = "{source_type}"')
+        if source_type == "dolphin":
+            dp = self._dolphin_path_var.get().strip()
+            if dp:
+                lines.append(f'path = "{dp}"')
+            ip = self._iso_path_var.get().strip()
+            if ip:
+                lines.append(f'iso = "{ip}"')
+        else:
+            wii_ip = self._wii_ip_var.get().strip()
+            if wii_ip:
+                lines.append(f'ip = "{wii_ip}"')
+            wii_port = self._wii_port_var.get().strip()
+            if wii_port and wii_port != "51441":
+                lines.append(f"port = {wii_port}")
         lines += [f"debug = {'true' if self._debug_var.get() else 'false'}", ""]
 
         mode_name = self._mode_var.get()
@@ -759,19 +826,34 @@ class App(ctk.CTk):
                 return
 
             global_max = self._intensity_var.get()
-            dolphin_path = self._dolphin_path_var.get().strip() or None
-            iso_path = self._iso_path_var.get().strip() or None
             debug = self._debug_var.get()
             logging.getLogger().setLevel(logging.DEBUG if debug else logging.INFO)
 
-            self._set_status("Connecting to Dolphin…")
-            self._source = DolphinSource(
-                dolphin_path=dolphin_path, iso_path=iso_path, debug=debug
-            )
+            source_type = self._source_var.get()
+            if source_type == "wii":
+                wii_ip = self._wii_ip_var.get().strip()
+                if not wii_ip:
+                    logger.error("Wii IP address is required")
+                    return
+                try:
+                    wii_port = int(self._wii_port_var.get().strip() or "51441")
+                except ValueError:
+                    logger.error("Wii port must be a number")
+                    return
+                self._set_status("Connecting to Wii…")
+                self._source = WiiSource(ip=wii_ip, port=wii_port, debug=debug)
+            else:
+                dolphin_path = self._dolphin_path_var.get().strip() or None
+                iso_path = self._iso_path_var.get().strip() or None
+                self._set_status("Connecting to Dolphin…")
+                self._source = DolphinSource(
+                    dolphin_path=dolphin_path, iso_path=iso_path, debug=debug
+                )
+
             try:
                 self._source.connect()
             except RuntimeError as e:
-                logger.error(f"Dolphin: {e}")
+                logger.error(f"Connect failed: {e}")
                 return
 
             self._engine = Engine(

@@ -82,8 +82,6 @@ class Engine:
             except Exception:
                 logger.info("Source disconnected, stopping")
                 break
-            if state is None:
-                break
             try:
                 self._tick(state)
             except Exception:
@@ -125,6 +123,7 @@ class Engine:
 
     def _game_tick(self, state: GameState):
         # new game started
+        print(state.frame)
         if self.prev_frame is None or state.frame < self.prev_frame:
             self.mode = EngineMode.ON
             logger.info("New game detected, resetting engine mode to ON")

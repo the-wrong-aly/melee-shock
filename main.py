@@ -7,7 +7,7 @@ import melee_shock.config as config
 from melee_shock.engine import Engine, OutputMode, Player
 from melee_shock.modes.registry import get as get_mode
 from melee_shock.apis.pishock import PiShockSerialAPI
-from melee_shock.sources.dolphin import DolphinSource
+from melee_shock.sources import DolphinSource, WiiSource
 
 logging.basicConfig(
     format="%(asctime)s %(name)s %(levelname)s %(message)s",
@@ -40,6 +40,24 @@ def build_players(cfg: config.Config) -> dict[int, Player]:
     return players
 
 
+def build_source(cfg: config.Config):
+    if cfg.source == "dolphin":
+        source = DolphinSource(
+            dolphin_path=cfg.dolphin_path,
+            iso_path=cfg.iso_path,
+            debug=cfg.debug,
+        )
+    elif cfg.source == "wii":
+        source = WiiSource(
+            ip=cfg.wii_ip,
+            port=cfg.wii_port,
+        )
+    else:
+        raise ValueError(f"Invalid source: {cfg.source}")
+
+    return source
+
+
 def main():
     import argparse
 
@@ -63,11 +81,7 @@ def main():
     try:
         players = build_players(cfg)
         api = PiShockSerialAPI(players)
-        source = DolphinSource(
-            dolphin_path=cfg.dolphin_path,
-            iso_path=cfg.iso_path,
-            debug=cfg.debug,
-        )
+        source = build_source(cfg)
         engine = Engine(
             source, players, api, global_max_intensity=cfg.global_max_intensity
         )
@@ -81,7 +95,7 @@ def main():
 
     signal.signal(signal.SIGINT, handle_sigint)
 
-    logger.info("Connecting to Dolphin...")
+    logger.info("Connecting to Dolphin/Wii...")
     try:
         source.connect()
     except RuntimeError as e:

@@ -24,7 +24,8 @@ Real-time haptic feedback for Super Smash Bros. Melee. Monitors live game state 
 
 ## Requirements
 
-- [Slippi Dolphin](https://slippi.gg/) with a Melee ISO
+- **Dolphin:** [Slippi Dolphin](https://slippi.gg/) with a Melee ISO
+- **Console:** A Wii running [Slippi Nintendont](https://slippi.gg/downloads) with Slippi support, follow this [guide](https://docs.google.com/document/d/1HhcdCIEZC-FtFEiAMZjyuAuVlTY7-9NyWZWoY09yr0c)
 - A PiShock hub connected via USB
 
 ## Download
@@ -35,12 +36,14 @@ Pre-built Windows executables are available on the [Releases](../../releases) pa
 
 On first launch, configure your setup in the **Settings** tab:
 
-- **Dolphin** - path to your Slippi installation and Melee ISO (should be able to leave empty)
+- **Source** - choose `dolphin` or `wii`
+  - *Dolphin:* path to your Slippi installation and Melee ISO (can be left empty to auto-detect)
+  - *Wii:* IP address of your Wii on the local network; port defaults to `51441`
 - **Global** - set a max intensity (start low) and a default mode with its parameters
 - **P1–P4** - set each player's output type (`shock`, `vibrate`, or `disabled`); optionally override the mode per player
 - **Shockers** - appears after connecting; use the Beep / Vibrate / Shock buttons to test each shocker
 
-Hit **Save** to write your settings to a config file, then **Connect & Start**. melee-shock will connect to a running Dolphin or launch it automatically.
+Hit **Save** to write your settings to a config file, then **Connect & Start**. For Dolphin, melee-shock will connect to a running instance or launch it automatically. For Wii, it connects to the Nintendont-Slippi TCP stream on the specified IP.
 
 All settings are locked while running. Hit **Stop** to end the session.
 
@@ -212,12 +215,15 @@ To enable it: open Dolphin, right-click your Melee ISO, select **Properties → 
 
 The GUI saves settings to a `.toml` file which can also be edited directly.
 
+**Dolphin:**
+
 ```toml
 global_max_intensity = 10
 
-[dolphin]
-path = "path/to/Slippi"
-iso = "path/to/melee.iso"
+[source]
+type = "dolphin"
+path = "path/to/Slippi"  # optional
+iso = "path/to/melee.iso"  # optional
 debug = false
 
 [mode]
@@ -236,6 +242,26 @@ name = "interval"
 interval = 5.0
 intensity = 30
 duration = 0.3
+```
+
+**Wii console:**
+
+```toml
+global_max_intensity = 10
+
+[source]
+type = "wii"
+ip = "192.168.1.100"  # your Wii's local IP
+port = 51441          # optional, default is 51441
+debug = false
+
+[mode]
+name = "damage"
+max_intensity = 50
+min_duration = 0.05
+
+[players.1]
+output_mode = "shock"
 ```
 
 </details>
@@ -268,7 +294,7 @@ Output in `dist/melee-shock/`.
 
 ## TODO
 
-- [ ] Wii console support
+- [x] Wii console support
 - [ ] Charge meter mode
 - [ ] Better support for online opponents
 

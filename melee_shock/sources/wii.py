@@ -96,8 +96,6 @@ class WiiStreamClient:
             return {"type": _TYPE_KEEPALIVE, "payload": {}}
         return ubjson.loadb(self._recv_exact(length))
 
-    # ── translate Wii message → SlippstreamClient dispatch() shape ────────────
-
     def _translate(self, wii_msg: dict) -> list[dict]:
         t = wii_msg.get("type")
         p = wii_msg.get("payload", {})

@@ -2,8 +2,10 @@ import logging
 import queue
 import threading
 import tkinter as tk
+from dataclasses import dataclass
 from pathlib import Path
 from tkinter import filedialog
+from typing import Any, Callable
 
 import customtkinter as ctk
 from pydantic import ValidationError
@@ -48,6 +50,17 @@ MODE_FIELDS: dict[str, list[tuple[str, str, str, str | None]]] = {
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class ModeEntry:
+    name_var: tk.StringVar
+    params_vars: dict
+    frame: ctk.CTkFrame
+    params_frame: ctk.CTkFrame
+    lockable: list
+    indent: int
+    on_change: Callable | None = None
+
+
 class _QueueHandler(logging.Handler):
     def __init__(self, q: queue.Queue) -> None:
         super().__init__()
@@ -69,11 +82,11 @@ class App(ctk.CTk):
         self._log_q: queue.Queue = queue.Queue()
         self._worker: threading.Thread | None = None
         self._lockable: list = []
-        # Global and per-player mode entries. Each entry is a dict:
-        #   name_var, params_vars, frame, params_frame, lockable
-        self._global_mode_entries: list = []
+        self._global_mode_entries: list[ModeEntry] = []
         self._global_modes_container: ctk.CTkFrame | None = None
-        self._player_mode_entries: dict[int, list] = {p: [] for p in range(1, 5)}
+        self._player_mode_entries: dict[int, list[ModeEntry]] = {
+            p: [] for p in range(1, 5)
+        }
         self._player_modes_container: dict[int, ctk.CTkFrame] = {}
         self._player_global_mode_labels: dict[int, ctk.CTkLabel] = {}
 
@@ -157,14 +170,16 @@ class App(ctk.CTk):
     def _build_settings_tab(self, parent: ctk.CTkFrame) -> None:
         parent.grid_columnconfigure(0, weight=1)
         parent.grid_rowconfigure(0, weight=1)
-
         scroll = ctk.CTkScrollableFrame(parent)
         scroll.grid(row=0, column=0, sticky="nsew")
         scroll.grid_columnconfigure(1, weight=1)
-
         r = 0
+        r = self._build_source_section(scroll, r)
+        r = self._build_global_section(scroll, r)
+        r = self._build_players_section(scroll, r)
+        self._build_shockers_section(scroll, r)
 
-        # Source
+    def _build_source_section(self, scroll: ctk.CTkScrollableFrame, r: int) -> int:
         ctk.CTkLabel(scroll, text="Source", font=ctk.CTkFont(weight="bold")).grid(
             row=r, column=0, columnspan=3, sticky="w", padx=8, pady=(8, 2)
         )
@@ -255,7 +270,9 @@ class App(ctk.CTk):
         ).grid(row=r, column=1, sticky="w", padx=4, pady=3)
         r += 1
 
-        # Global
+        return r
+
+    def _build_global_section(self, scroll: ctk.CTkScrollableFrame, r: int) -> int:
         ctk.CTkLabel(scroll, text="Global", font=ctk.CTkFont(weight="bold")).grid(
             row=r, column=0, columnspan=3, sticky="w", padx=8, pady=(12, 2)
         )
@@ -301,7 +318,9 @@ class App(ctk.CTk):
         ).grid(row=r, column=0, sticky="w", padx=(20, 8), pady=(2, 4))
         r += 1
 
-        # Players
+        return r
+
+    def _build_players_section(self, scroll: ctk.CTkScrollableFrame, r: int) -> int:
         ctk.CTkLabel(scroll, text="Players", font=ctk.CTkFont(weight="bold")).grid(
             row=r, column=0, columnspan=3, sticky="w", padx=8, pady=(12, 2)
         )
@@ -367,7 +386,9 @@ class App(ctk.CTk):
             )
             sf.grid_remove()
 
-        # Shockers
+        return r
+
+    def _build_shockers_section(self, scroll: ctk.CTkScrollableFrame, r: int) -> None:
         ctk.CTkLabel(scroll, text="Shockers", font=ctk.CTkFont(weight="bold")).grid(
             row=r, column=0, columnspan=3, sticky="w", padx=8, pady=(12, 2)
         )
@@ -376,12 +397,9 @@ class App(ctk.CTk):
         self._shockers_frame = ctk.CTkFrame(scroll, fg_color="transparent")
         self._shockers_frame.grid(row=r, column=0, columnspan=3, sticky="ew")
         self._shockers_frame.grid_columnconfigure(1, weight=1)
-        self._shockers_placeholder = ctk.CTkLabel(
+        ctk.CTkLabel(
             self._shockers_frame, text="Not connected", text_color="gray"
-        )
-        self._shockers_placeholder.grid(
-            row=0, column=0, sticky="w", padx=(20, 8), pady=4
-        )
+        ).grid(row=0, column=0, sticky="w", padx=(20, 8), pady=4)
 
     def _on_source_changed(self, source_type: str) -> None:
         if source_type == "dolphin":
@@ -419,11 +437,11 @@ class App(ctk.CTk):
     def _add_mode_entry(
         self,
         container: ctk.CTkFrame,
-        entries: list,
+        entries: list[ModeEntry],
         mode_name: str = "damage",
         indent: int = 20,
-        on_change=None,
-    ) -> dict:
+        on_change: Callable | None = None,
+    ) -> ModeEntry:
         row = len(entries)
 
         entry_frame = ctk.CTkFrame(container, fg_color="transparent")
@@ -449,15 +467,15 @@ class App(ctk.CTk):
         params_frame.grid(row=1, column=0, columnspan=3, sticky="ew")
         params_frame.grid_columnconfigure(1, weight=1)
 
-        entry: dict = {
-            "name_var": name_var,
-            "params_vars": {},
-            "frame": entry_frame,
-            "params_frame": params_frame,
-            "lockable": lockable,
-            "indent": indent,
-            "on_change": on_change,
-        }
+        entry = ModeEntry(
+            name_var=name_var,
+            params_vars={},
+            frame=entry_frame,
+            params_frame=params_frame,
+            lockable=lockable,
+            indent=indent,
+            on_change=on_change,
+        )
         entries.append(entry)
 
         remove_btn.configure(
@@ -468,46 +486,42 @@ class App(ctk.CTk):
         name_var.trace_add(
             "write",
             lambda *_, e=entry: self._rebuild_mode_params_for_entry(
-                e, e["name_var"].get()
+                e, e.name_var.get()
             ),
         )
-
         self._rebuild_mode_params_for_entry(entry, mode_name)
         return entry
 
-    def _remove_mode_entry(self, entries: list, entry: dict) -> None:
+    def _remove_mode_entry(self, entries: list[ModeEntry], entry: ModeEntry) -> None:
         if entry in entries:
             entries.remove(entry)
-        entry["frame"].destroy()
+        entry.frame.destroy()
         for i, e in enumerate(entries):
-            e["frame"].grid(row=i, column=0, sticky="ew", pady=(2, 0))
-        on_change = entry.get("on_change")
-        if on_change:
-            on_change()
+            e.frame.grid(row=i, column=0, sticky="ew", pady=(2, 0))
+        if entry.on_change:
+            entry.on_change()
 
-    def _rebuild_mode_params_for_entry(self, entry: dict, mode_name: str) -> None:
-        frame = entry["params_frame"]
+    def _rebuild_mode_params_for_entry(self, entry: ModeEntry, mode_name: str) -> None:
+        frame = entry.params_frame
         for w in frame.winfo_children():
             w.destroy()
-        # Keep only dropdown + remove button (indices 0 and 1)
-        entry["lockable"] = entry["lockable"][:2]
-        entry["params_vars"].clear()
-        indent = entry.get("indent", 20) + 16
+        entry.lockable = entry.lockable[:2]
+        entry.params_vars.clear()
+        indent = entry.indent + 16
         for i, (key, label, typ, default) in enumerate(MODE_FIELDS[mode_name]):
             ctk.CTkLabel(frame, text=label).grid(
                 row=i, column=0, sticky="w", padx=(indent, 8), pady=2
             )
-            if typ == "intensity_range":
-                self._build_intensity_range_block(
-                    frame, i, entry["params_vars"], entry["lockable"]
+            if typ in ("intensity_range", "interval_range"):
+                self._build_range_block(
+                    frame,
+                    i,
+                    entry.params_vars,
+                    entry.lockable,
+                    key_prefix=typ.replace("_range", ""),
                 )
                 continue
-            elif typ == "interval_range":
-                self._build_interval_range_block(
-                    frame, i, entry["params_vars"], entry["lockable"]
-                )
-                continue
-            elif typ == "bool":
+            if typ == "bool":
                 var: tk.Variable = tk.BooleanVar(value=False)
                 widget = ctk.CTkCheckBox(
                     frame, text="", variable=var, onvalue=True, offvalue=False
@@ -527,27 +541,52 @@ class App(ctk.CTk):
                 var = tk.StringVar(value=default if default is not None else "")
                 widget = ctk.CTkEntry(frame, textvariable=var, width=160)
             widget.grid(row=i, column=1, sticky="ew", padx=4, pady=2)
-            entry["lockable"].append(widget)
-            entry["params_vars"][key] = var
+            entry.lockable.append(widget)
+            entry.params_vars[key] = var
 
-    def _build_intensity_range_block(
-        self, frame: ctk.CTkFrame, row: int, vars_dict: dict, lockable: list
+    def _build_range_block(
+        self,
+        frame: ctk.CTkFrame,
+        row: int,
+        vars_dict: dict,
+        lockable: list,
+        key_prefix: str,
     ) -> None:
+        """Builds an intensity (slider) or interval (entry) fixed/range toggle block."""
+        is_intensity = key_prefix == "intensity"
+
         sub = ctk.CTkFrame(frame, fg_color="transparent")
         sub.grid(row=row, column=1, columnspan=2, sticky="ew", padx=4, pady=2)
         sub.grid_columnconfigure(1, weight=1)
 
         use_range_var = tk.BooleanVar(value=False)
 
-        fixed_var = tk.IntVar(value=0)
-        fixed_val_lbl = ctk.CTkLabel(sub, text="0", width=52, anchor="w")
-        fixed_var.trace_add(
-            "write",
-            lambda *_, v=fixed_var, lbl=fixed_val_lbl: lbl.configure(text=str(v.get())),
-        )
-        fixed_slider = ctk.CTkSlider(
-            sub, from_=0, to=100, number_of_steps=100, variable=fixed_var
-        )
+        def make_slider(var: tk.IntVar):
+            lbl = ctk.CTkLabel(sub, text="0", width=52, anchor="w")
+            var.trace_add(
+                "write", lambda *_, v=var, l=lbl: l.configure(text=str(v.get()))
+            )
+            return ctk.CTkSlider(
+                sub, from_=0, to=100, number_of_steps=100, variable=var
+            ), lbl
+
+        if is_intensity:
+            fixed_var: tk.Variable = tk.IntVar(value=0)
+            fixed_widget, fixed_extra = make_slider(fixed_var)
+            min_var: tk.Variable = tk.IntVar(value=0)
+            min_widget, min_extra = make_slider(min_var)
+            max_var: tk.Variable = tk.IntVar(value=0)
+            max_widget, max_extra = make_slider(max_var)
+        else:
+            fixed_var = tk.StringVar(value="")
+            fixed_widget = ctk.CTkEntry(sub, textvariable=fixed_var, width=160)
+            fixed_extra = None
+            min_var = tk.StringVar(value="")
+            min_widget = ctk.CTkEntry(sub, textvariable=min_var, width=120)
+            min_extra = None
+            max_var = tk.StringVar(value="")
+            max_widget = ctk.CTkEntry(sub, textvariable=max_var, width=120)
+            max_extra = None
 
         toggle = ctk.CTkCheckBox(
             sub,
@@ -556,133 +595,70 @@ class App(ctk.CTk):
             onvalue=True,
             offvalue=False,
         )
-        toggle.grid(row=1, column=0, columnspan=3, sticky="w", pady=(2, 0))
-
-        min_var = tk.IntVar(value=0)
-        min_val_lbl = ctk.CTkLabel(sub, text="0", width=52, anchor="w")
-        min_var.trace_add(
-            "write",
-            lambda *_, v=min_var, lbl=min_val_lbl: lbl.configure(text=str(v.get())),
+        toggle.grid(
+            row=1,
+            column=0,
+            columnspan=3 if is_intensity else 2,
+            sticky="w",
+            pady=(2, 0),
         )
+
         min_label = ctk.CTkLabel(sub, text="Min", anchor="w")
-        min_slider = ctk.CTkSlider(
-            sub, from_=0, to=100, number_of_steps=100, variable=min_var
-        )
-
-        max_var = tk.IntVar(value=0)
-        max_val_lbl = ctk.CTkLabel(sub, text="0", width=52, anchor="w")
-        max_var.trace_add(
-            "write",
-            lambda *_, v=max_var, lbl=max_val_lbl: lbl.configure(text=str(v.get())),
-        )
         max_label = ctk.CTkLabel(sub, text="Max", anchor="w")
-        max_slider = ctk.CTkSlider(
-            sub, from_=0, to=100, number_of_steps=100, variable=max_var
-        )
 
         def _show_fixed(*_):
-            fixed_slider.grid(row=0, column=0, columnspan=2, sticky="ew")
-            fixed_val_lbl.grid(row=0, column=2, padx=(4, 0))
+            fixed_widget.grid(row=0, column=0, columnspan=2, sticky="ew")
+            if fixed_extra:
+                fixed_extra.grid(row=0, column=2, padx=(4, 0))
             min_label.grid_remove()
-            min_slider.grid_remove()
-            min_val_lbl.grid_remove()
+            min_widget.grid_remove()
+            if min_extra:
+                min_extra.grid_remove()
             max_label.grid_remove()
-            max_slider.grid_remove()
-            max_val_lbl.grid_remove()
+            max_widget.grid_remove()
+            if max_extra:
+                max_extra.grid_remove()
 
         def _show_range(*_):
-            fixed_slider.grid_remove()
-            fixed_val_lbl.grid_remove()
+            fixed_widget.grid_remove()
+            if fixed_extra:
+                fixed_extra.grid_remove()
             min_label.grid(row=2, column=0, sticky="w", padx=(0, 4))
-            min_slider.grid(row=2, column=1, sticky="ew")
-            min_val_lbl.grid(row=2, column=2, padx=(4, 0))
+            min_widget.grid(row=2, column=1, sticky="ew")
+            if min_extra:
+                min_extra.grid(row=2, column=2, padx=(4, 0))
             max_label.grid(row=3, column=0, sticky="w", padx=(0, 4))
-            max_slider.grid(row=3, column=1, sticky="ew")
-            max_val_lbl.grid(row=3, column=2, padx=(4, 0))
+            max_widget.grid(row=3, column=1, sticky="ew")
+            if max_extra:
+                max_extra.grid(row=3, column=2, padx=(4, 0))
 
         use_range_var.trace_add(
             "write", lambda *_: _show_range() if use_range_var.get() else _show_fixed()
         )
 
-        fixed_slider.grid(row=0, column=0, columnspan=2, sticky="ew")
-        fixed_val_lbl.grid(row=0, column=2, padx=(4, 0))
+        # Place all, then hide the range half
+        fixed_widget.grid(row=0, column=0, columnspan=2, sticky="ew")
+        if fixed_extra:
+            fixed_extra.grid(row=0, column=2, padx=(4, 0))
         min_label.grid(row=2, column=0, sticky="w", padx=(0, 4))
-        min_slider.grid(row=2, column=1, sticky="ew")
-        min_val_lbl.grid(row=2, column=2, padx=(4, 0))
+        min_widget.grid(row=2, column=1, sticky="ew")
+        if min_extra:
+            min_extra.grid(row=2, column=2, padx=(4, 0))
         max_label.grid(row=3, column=0, sticky="w", padx=(0, 4))
-        max_slider.grid(row=3, column=1, sticky="ew")
-        max_val_lbl.grid(row=3, column=2, padx=(4, 0))
+        max_widget.grid(row=3, column=1, sticky="ew")
+        if max_extra:
+            max_extra.grid(row=3, column=2, padx=(4, 0))
         _show_fixed()
 
-        vars_dict["intensity"] = fixed_var
-        vars_dict["intensity_min"] = min_var
-        vars_dict["intensity_max"] = max_var
-        vars_dict["_intensity_use_range"] = use_range_var
-        lockable.extend([fixed_slider, toggle, min_slider, max_slider])
-
-    def _build_interval_range_block(
-        self, frame: ctk.CTkFrame, row: int, vars_dict: dict, lockable: list
-    ) -> None:
-        sub = ctk.CTkFrame(frame, fg_color="transparent")
-        sub.grid(row=row, column=1, columnspan=2, sticky="ew", padx=4, pady=2)
-        sub.grid_columnconfigure(1, weight=1)
-
-        use_range_var = tk.BooleanVar(value=False)
-
-        fixed_var = tk.StringVar(value="")
-        fixed_entry = ctk.CTkEntry(sub, textvariable=fixed_var, width=160)
-
-        toggle = ctk.CTkCheckBox(
-            sub,
-            text="Random range",
-            variable=use_range_var,
-            onvalue=True,
-            offvalue=False,
-        )
-        toggle.grid(row=1, column=0, columnspan=2, sticky="w", pady=(2, 0))
-
-        min_var = tk.StringVar(value="")
-        min_label = ctk.CTkLabel(sub, text="Min", anchor="w")
-        min_entry = ctk.CTkEntry(sub, textvariable=min_var, width=120)
-
-        max_var = tk.StringVar(value="")
-        max_label = ctk.CTkLabel(sub, text="Max", anchor="w")
-        max_entry = ctk.CTkEntry(sub, textvariable=max_var, width=120)
-
-        def _show_fixed(*_):
-            fixed_entry.grid(row=0, column=0, columnspan=2, sticky="ew")
-            min_label.grid_remove()
-            min_entry.grid_remove()
-            max_label.grid_remove()
-            max_entry.grid_remove()
-
-        def _show_range(*_):
-            fixed_entry.grid_remove()
-            min_label.grid(row=2, column=0, sticky="w", padx=(0, 4))
-            min_entry.grid(row=2, column=1, sticky="ew")
-            max_label.grid(row=3, column=0, sticky="w", padx=(0, 4))
-            max_entry.grid(row=3, column=1, sticky="ew")
-
-        use_range_var.trace_add(
-            "write", lambda *_: _show_range() if use_range_var.get() else _show_fixed()
-        )
-
-        fixed_entry.grid(row=0, column=0, columnspan=2, sticky="ew")
-        min_label.grid(row=2, column=0, sticky="w", padx=(0, 4))
-        min_entry.grid(row=2, column=1, sticky="ew")
-        max_label.grid(row=3, column=0, sticky="w", padx=(0, 4))
-        max_entry.grid(row=3, column=1, sticky="ew")
-        _show_fixed()
-
-        vars_dict["interval"] = fixed_var
-        vars_dict["interval_min"] = min_var
-        vars_dict["interval_max"] = max_var
-        vars_dict["_interval_use_range"] = use_range_var
-        lockable.extend([fixed_entry, toggle, min_entry, max_entry])
+        vars_dict[key_prefix] = fixed_var
+        vars_dict[f"{key_prefix}_min"] = min_var
+        vars_dict[f"{key_prefix}_max"] = max_var
+        vars_dict[f"_{key_prefix}_use_range"] = use_range_var
+        lockable.extend([fixed_widget, toggle, min_widget, max_widget])
 
     # ── global / per-player mode management ──────────────────────────────────
 
-    def _add_global_mode(self, mode_name: str = "damage") -> dict:
+    def _add_global_mode(self, mode_name: str = "damage") -> ModeEntry:
         return self._add_mode_entry(
             self._global_modes_container,
             self._global_mode_entries,
@@ -690,7 +666,7 @@ class App(ctk.CTk):
             indent=20,
         )
 
-    def _add_player_mode(self, port: int, mode_name: str = "damage") -> dict:
+    def _add_player_mode(self, port: int, mode_name: str = "damage") -> ModeEntry:
         return self._add_mode_entry(
             self._player_modes_container[port],
             self._player_mode_entries[port],
@@ -722,57 +698,165 @@ class App(ctk.CTk):
     def _on_intensity_changed(self, *_) -> None:
         self._intensity_label.configure(text=str(self._intensity_var.get()))
 
+    # ── field-level type dispatch ─────────────────────────────────────────────
+
+    @staticmethod
+    def _field_to_params(typ: str, key: str, pvars: dict) -> dict[str, Any]:
+        """Read one field's vars into a params dict fragment for the mode constructor."""
+        if typ == "intensity_range":
+            use_range = pvars.get("_intensity_use_range")
+            if use_range and use_range.get():
+                result = {}
+                for rk in ("intensity_min", "intensity_max"):
+                    rv = pvars.get(rk)
+                    if rv is not None:
+                        result[rk] = int(rv.get())
+                return result
+            var = pvars.get(key)
+            s = str(var.get()).strip() if var is not None else ""
+            return {key: int(s)} if s else {}
+        if typ == "interval_range":
+            use_range = pvars.get("_interval_use_range")
+            if use_range and use_range.get():
+                result = {}
+                for rk in ("interval_min", "interval_max"):
+                    rv = pvars.get(rk)
+                    if rv is not None:
+                        s = str(rv.get()).strip()
+                        if s:
+                            result[rk] = float(s)
+                return result
+            var = pvars.get(key)
+            s = str(var.get()).strip() if var is not None else ""
+            return {key: float(s)} if s else {}
+        var = pvars.get(key)
+        if var is None:
+            return {}
+        raw = var.get()
+        if typ == "bool":
+            return {key: bool(raw)}
+        if typ in ("int", "intensity"):
+            s = str(raw).strip()
+            return {key: int(s)} if s else {}
+        if typ == "float":
+            s = str(raw).strip()
+            return {key: float(s)} if s else {}
+        # str
+        s = str(raw).strip()
+        if not s:
+            return {}
+        parts = [p.strip() for p in s.split(",") if p.strip()]
+        return {key: parts[0] if len(parts) == 1 else parts}
+
+    @staticmethod
+    def _field_to_toml(typ: str, key: str, pvars: dict) -> list[str]:
+        """Serialize one field's vars to TOML lines."""
+        if typ == "intensity_range":
+            use_range = pvars.get("_intensity_use_range")
+            if use_range and use_range.get():
+                lines = []
+                for rk in ("intensity_min", "intensity_max"):
+                    rv = pvars.get(rk)
+                    if rv is not None:
+                        lines.append(f"{rk} = {int(rv.get())}")
+                return lines
+            var = pvars.get(key)
+            s = str(var.get()).strip() if var is not None else ""
+            return [f"{key} = {int(s)}"] if s else []
+        if typ == "interval_range":
+            use_range = pvars.get("_interval_use_range")
+            if use_range and use_range.get():
+                lines = []
+                for rk in ("interval_min", "interval_max"):
+                    rv = pvars.get(rk)
+                    if rv is not None:
+                        s = str(rv.get()).strip()
+                        if s:
+                            lines.append(f"{rk} = {float(s)}")
+                return lines
+            var = pvars.get(key)
+            s = str(var.get()).strip() if var is not None else ""
+            return [f"{key} = {float(s)}"] if s else []
+        var = pvars.get(key)
+        if var is None:
+            return []
+        raw = var.get()
+        if typ == "bool":
+            return [f"{key} = {'true' if raw else 'false'}"]
+        if typ in ("int", "intensity"):
+            s = str(raw).strip()
+            return [f"{key} = {int(s)}"] if s else []
+        if typ == "float":
+            s = str(raw).strip()
+            return [f"{key} = {float(s)}"] if s else []
+        # str
+        s = str(raw).strip()
+        if not s:
+            return []
+        parts = [p.strip() for p in s.split(",") if p.strip()]
+        if len(parts) == 1:
+            return [f'{key} = "{parts[0]}"']
+        items = ", ".join(f'"{p}"' for p in parts)
+        return [f"{key} = [{items}]"]
+
+    @staticmethod
+    def _load_field_from_raw(
+        typ: str, key: str, mode_raw: dict, vars_dict: dict
+    ) -> None:
+        """Load one field from a raw TOML dict into the vars dict."""
+        if typ == "intensity_range":
+            use_range_var = vars_dict.get("_intensity_use_range")
+            if "intensity_min" in mode_raw or "intensity_max" in mode_raw:
+                if use_range_var:
+                    use_range_var.set(True)
+                for rk in ("intensity_min", "intensity_max"):
+                    if rk in mode_raw:
+                        rv = vars_dict.get(rk)
+                        if rv:
+                            rv.set(int(mode_raw[rk]))
+            else:
+                val = mode_raw.get(key)
+                var = vars_dict.get(key)
+                if val is not None and var is not None:
+                    var.set(int(val))
+            return
+        if typ == "interval_range":
+            use_range_var = vars_dict.get("_interval_use_range")
+            if "interval_min" in mode_raw or "interval_max" in mode_raw:
+                if use_range_var:
+                    use_range_var.set(True)
+                for rk in ("interval_min", "interval_max"):
+                    if rk in mode_raw:
+                        rv = vars_dict.get(rk)
+                        if rv:
+                            rv.set(str(mode_raw[rk]))
+            else:
+                val = mode_raw.get(key)
+                var = vars_dict.get(key)
+                if val is not None and var is not None:
+                    var.set(str(val))
+            return
+        val = mode_raw.get(key)
+        var = vars_dict.get(key)
+        if val is None or var is None:
+            return
+        if typ == "bool":
+            var.set(bool(val))
+        elif typ == "intensity":
+            var.set(int(val))
+        elif typ == "str":
+            var.set(", ".join(val) if isinstance(val, list) else str(val))
+        else:
+            var.set(str(val))
+
     # ── mode object builders ──────────────────────────────────────────────────
 
-    def _make_mode_from_entry(self, entry: dict) -> object:
-        mode_name = entry["name_var"].get()
+    def _make_mode_from_entry(self, entry: ModeEntry) -> object:
+        mode_name = entry.name_var.get()
         mode_cls, config_cls = get_mode(mode_name)
         params: dict = {"name": mode_name}
-        pvars = entry["params_vars"]
         for key, _, typ, _ in MODE_FIELDS[mode_name]:
-            var = pvars.get(key)
-            if var is None:
-                continue
-            raw = var.get()
-            if typ == "intensity_range":
-                use_range = pvars.get("_intensity_use_range")
-                if use_range and use_range.get():
-                    for rk in ("intensity_min", "intensity_max"):
-                        rv = pvars.get(rk)
-                        if rv is not None:
-                            params[rk] = int(rv.get())
-                else:
-                    s = str(raw).strip()
-                    if s:
-                        params[key] = int(s)
-            elif typ == "interval_range":
-                use_range = pvars.get("_interval_use_range")
-                if use_range and use_range.get():
-                    for rk in ("interval_min", "interval_max"):
-                        rv = pvars.get(rk)
-                        if rv is not None:
-                            s = str(rv.get()).strip()
-                            if s:
-                                params[rk] = float(s)
-                else:
-                    s = str(raw).strip()
-                    if s:
-                        params[key] = float(s)
-            elif typ == "bool":
-                params[key] = bool(raw)
-            elif typ in ("int", "intensity"):
-                s = str(raw).strip()
-                if s:
-                    params[key] = int(s)
-            elif typ == "float":
-                s = str(raw).strip()
-                if s:
-                    params[key] = float(s)
-            else:
-                s = str(raw).strip()
-                if s:
-                    parts = [p.strip() for p in s.split(",") if p.strip()]
-                    params[key] = parts[0] if len(parts) == 1 else parts
+            params.update(self._field_to_params(typ, key, entry.params_vars))
         return mode_cls(config_cls.model_validate(params))
 
     def _make_global_modes(self) -> list:
@@ -847,22 +931,18 @@ class App(ctk.CTk):
             cfg.global_max_intensity if cfg.global_max_intensity is not None else 0
         )
 
-        # Global modes
         for entry in self._global_mode_entries:
-            entry["frame"].destroy()
+            entry.frame.destroy()
         self._global_mode_entries.clear()
-
-        global_modes_raw = raw.get("modes", [])
-        for mode_raw in global_modes_raw:
+        for mode_raw in raw.get("modes", []):
             mode_name = mode_raw.get("name", "damage")
             entry = self._add_global_mode(mode_name)
-            self._load_mode_fields(mode_raw, mode_name, entry["params_vars"])
+            self._load_mode_fields(mode_raw, mode_name, entry.params_vars)
 
-        # Per-player
         raw_players = raw.get("players", {})
         for port in range(1, 5):
             for entry in self._player_mode_entries[port]:
-                entry["frame"].destroy()
+                entry.frame.destroy()
             self._player_mode_entries[port].clear()
 
             if port in cfg.players:
@@ -870,13 +950,10 @@ class App(ctk.CTk):
                 self._player_vars[port].set(player_cfg.output_mode)
                 if player_cfg.output_mode != "disabled":
                     player_raw = raw_players.get(str(port), {})
-                    modes_raw = player_raw.get("modes", [])
-                    for mode_raw in modes_raw:
+                    for mode_raw in player_raw.get("modes", []):
                         mode_name = mode_raw.get("name", "damage")
                         entry = self._add_player_mode(port, mode_name)
-                        self._load_mode_fields(
-                            mode_raw, mode_name, entry["params_vars"]
-                        )
+                        self._load_mode_fields(mode_raw, mode_name, entry.params_vars)
             else:
                 self._player_vars[port].set("disabled")
             self._update_player_global_label(port)
@@ -884,62 +961,10 @@ class App(ctk.CTk):
         logger.info(f"Loaded {path.name}")
 
     def _load_mode_fields(
-        self,
-        mode_raw: dict,
-        mode_name: str,
-        vars_dict: dict[str, tk.Variable],
+        self, mode_raw: dict, mode_name: str, vars_dict: dict[str, tk.Variable]
     ) -> None:
         for key, _, typ, _ in MODE_FIELDS.get(mode_name, []):
-            val = mode_raw.get(key)
-            var = vars_dict.get(key)
-            if typ == "intensity_range":
-                if var is None:
-                    continue
-                use_range_var = vars_dict.get("_intensity_use_range")
-                if "intensity_min" in mode_raw or "intensity_max" in mode_raw:
-                    if use_range_var:
-                        use_range_var.set(True)
-                    if "intensity_min" in mode_raw:
-                        rv = vars_dict.get("intensity_min")
-                        if rv:
-                            rv.set(int(mode_raw["intensity_min"]))
-                    if "intensity_max" in mode_raw:
-                        rv = vars_dict.get("intensity_max")
-                        if rv:
-                            rv.set(int(mode_raw["intensity_max"]))
-                elif val is not None:
-                    var.set(int(val))
-                continue
-            if typ == "interval_range":
-                if var is None:
-                    continue
-                use_range_var = vars_dict.get("_interval_use_range")
-                if "interval_min" in mode_raw or "interval_max" in mode_raw:
-                    if use_range_var:
-                        use_range_var.set(True)
-                    if "interval_min" in mode_raw:
-                        rv = vars_dict.get("interval_min")
-                        if rv:
-                            rv.set(str(mode_raw["interval_min"]))
-                    if "interval_max" in mode_raw:
-                        rv = vars_dict.get("interval_max")
-                        if rv:
-                            rv.set(str(mode_raw["interval_max"]))
-                elif val is not None:
-                    var.set(str(val))
-                continue
-            if val is None:
-                continue
-            if var is None:
-                continue
-            if typ == "bool":
-                var.set(bool(val))
-            elif typ == "intensity":
-                var.set(int(val))
-            elif typ == "str":
-                var.set(", ".join(val) if isinstance(val, list) else str(val))
-            else:
-                var.set(str(val))
+            self._load_field_from_raw(typ, key, mode_raw, vars_dict)
 
     def _save_config(self) -> None:
         path = Path(self._config_var.get())
@@ -975,9 +1000,9 @@ class App(ctk.CTk):
         lines += [f"debug = {'true' if self._debug_var.get() else 'false'}", ""]
 
         for entry in self._global_mode_entries:
-            mode_name = entry["name_var"].get()
-            lines += [f"[[modes]]", f'name = "{mode_name}"']
-            lines += self._mode_field_lines(mode_name, entry["params_vars"])
+            mode_name = entry.name_var.get()
+            lines += ["[[modes]]", f'name = "{mode_name}"']
+            lines += self._mode_field_lines(mode_name, entry.params_vars)
             lines.append("")
 
         active = {p for p in range(1, 5) if self._player_vars[p].get() != "disabled"}
@@ -988,9 +1013,9 @@ class App(ctk.CTk):
                 "",
             ]
             for entry in self._player_mode_entries[port]:
-                entry_mode = entry["name_var"].get()
-                lines += [f"[[players.{port}.modes]]", f'name = "{entry_mode}"']
-                lines += self._mode_field_lines(entry_mode, entry["params_vars"])
+                mode_name = entry.name_var.get()
+                lines += [f"[[players.{port}.modes]]", f'name = "{mode_name}"']
+                lines += self._mode_field_lines(mode_name, entry.params_vars)
                 lines.append("")
 
         return "\n".join(lines)
@@ -1000,53 +1025,7 @@ class App(ctk.CTk):
     ) -> list[str]:
         lines: list[str] = []
         for key, _, typ, _ in MODE_FIELDS[mode_name]:
-            var = vars_dict.get(key)
-            if var is None:
-                continue
-            raw = var.get()
-            if typ == "intensity_range":
-                use_range = vars_dict.get("_intensity_use_range")
-                if use_range and use_range.get():
-                    for rk in ("intensity_min", "intensity_max"):
-                        rv = vars_dict.get(rk)
-                        if rv is not None:
-                            lines.append(f"{rk} = {int(rv.get())}")
-                else:
-                    s = str(raw).strip()
-                    if s:
-                        lines.append(f"{key} = {int(s)}")
-            elif typ == "interval_range":
-                use_range = vars_dict.get("_interval_use_range")
-                if use_range and use_range.get():
-                    for rk in ("interval_min", "interval_max"):
-                        rv = vars_dict.get(rk)
-                        if rv is not None:
-                            s = str(rv.get()).strip()
-                            if s:
-                                lines.append(f"{rk} = {float(s)}")
-                else:
-                    s = str(raw).strip()
-                    if s:
-                        lines.append(f"{key} = {float(s)}")
-            elif typ == "bool":
-                lines.append(f"{key} = {'true' if raw else 'false'}")
-            elif typ in ("int", "intensity"):
-                s = str(raw).strip()
-                if s:
-                    lines.append(f"{key} = {int(s)}")
-            elif typ == "float":
-                s = str(raw).strip()
-                if s:
-                    lines.append(f"{key} = {float(s)}")
-            else:
-                s = str(raw).strip()
-                if s:
-                    ps = [p.strip() for p in s.split(",") if p.strip()]
-                    if len(ps) == 1:
-                        lines.append(f'{key} = "{ps[0]}"')
-                    else:
-                        items = ", ".join('"' + p + '"' for p in ps)
-                        lines.append(f"{key} = [{items}]")
+            lines.extend(self._field_to_toml(typ, key, vars_dict))
         return lines
 
     # ── connect / stop ────────────────────────────────────────────────────────
@@ -1191,27 +1170,24 @@ class App(ctk.CTk):
 
         threading.Thread(target=run, daemon=True).start()
 
-    def _lock_settings(self) -> None:
+    def _all_lockable_widgets(self) -> list:
         widgets = list(self._lockable)
         for entry in self._global_mode_entries:
-            widgets.extend(entry["lockable"])
+            widgets.extend(entry.lockable)
         for entries in self._player_mode_entries.values():
             for entry in entries:
-                widgets.extend(entry["lockable"])
-        for w in widgets:
+                widgets.extend(entry.lockable)
+        return widgets
+
+    def _lock_settings(self) -> None:
+        for w in self._all_lockable_widgets():
             try:
                 w.configure(state="disabled")
             except Exception:
                 pass
 
     def _unlock_settings(self) -> None:
-        widgets = list(self._lockable)
-        for entry in self._global_mode_entries:
-            widgets.extend(entry["lockable"])
-        for entries in self._player_mode_entries.values():
-            for entry in entries:
-                widgets.extend(entry["lockable"])
-        for w in widgets:
+        for w in self._all_lockable_widgets():
             try:
                 w.configure(state="normal")
             except Exception:

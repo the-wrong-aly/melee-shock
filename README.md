@@ -18,7 +18,7 @@ Real-time haptic feedback for Super Smash Bros. Melee. Monitors live game state 
 - **Damage mode** - triggers feedback when your character takes damage; intensity scales with damage dealt, duration matches hitstun frames
 - **Interval mode** - triggers feedback on a fixed time interval
 - **Action mode** - triggers feedback when your character enters a specific action state (e.g. shielding, grabbing)
-- **Per-player configuration** - each player slot can have its own mode and output type
+- **Per-player configuration** - each player slot can have multiple modes and its own output type
 - **Output modes** - `vibrate`, `shock`, or `disabled` per player
 - **In-game controls** - D-Pad Left kills the shock switch; D-Pad Right sends a ping
 
@@ -39,8 +39,8 @@ On first launch, configure your setup in the **Settings** tab:
 - **Source** - choose `dolphin` or `wii`
   - *Dolphin:* path to your Slippi installation and Melee ISO (can be left empty to auto-detect)
   - *Wii:* IP address of your Wii on the local network; port defaults to `51441`
-- **Global** - set a max intensity (start low) and a default mode with its parameters
-- **P1–P4** - set each player's output type (`shock`, `vibrate`, or `disabled`); optionally override the mode per player
+- **Global** - set a max intensity (start low) and one or more default modes using **+ Add mode**
+- **P1–P4** - set each player's output type (`shock`, `vibrate`, or `disabled`); use **+ Add mode** to assign one or more modes per player (if none are added, the global default modes are used)
 - **Shockers** - appears after connecting; use the Beep / Vibrate / Shock buttons to test each shocker
 
 Hit **Save** to write your settings to a config file, then **Connect & Start**. For Dolphin, melee-shock will connect to a running instance or launch it automatically. For Wii, it connects to the Nintendont-Slippi TCP stream on the specified IP.
@@ -226,7 +226,8 @@ path = "path/to/Slippi"  # optional
 iso = "path/to/melee.iso"  # optional
 debug = false
 
-[mode]
+# fallback used by any player with no [[players.N.modes]] entries
+[[modes]]
 name = "damage"
 max_intensity = 50
 min_duration = 0.05
@@ -234,14 +235,20 @@ min_duration = 0.05
 [players.1]
 output_mode = "shock"
 
+# P1 gets shocked on damage AND on shield/grab
+[[players.1.modes]]
+name = "damage"
+max_intensity = 50
+min_duration = 0.05
+
+[[players.1.modes]]
+name = "action"
+action = ["SHIELD", "GRAB"]
+intensity = 20
+
 [players.2]
 output_mode = "vibrate"
-
-[players.2.mode]
-name = "interval"
-interval = 5.0
-intensity = 30
-duration = 0.3
+# no [[players.2.modes]] — falls back to the global [[modes]]
 ```
 
 **Wii console:**
@@ -255,13 +262,18 @@ ip = "192.168.1.100"  # your Wii's local IP
 port = 51441          # optional, default is 51441
 debug = false
 
-[mode]
+[[modes]]
 name = "damage"
 max_intensity = 50
 min_duration = 0.05
 
 [players.1]
 output_mode = "shock"
+
+[[players.1.modes]]
+name = "damage"
+max_intensity = 50
+min_duration = 0.05
 ```
 
 </details>

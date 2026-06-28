@@ -2,6 +2,7 @@ import tomllib
 from pathlib import Path
 from pydantic import BaseModel, field_validator
 from melee_shock.modes.registry import get as get_mode
+from melee_shock.modes.base import BaseMode
 
 
 VALID_OUTPUT_MODES = ("shock", "vibrate", "disabled")
@@ -10,7 +11,7 @@ VALID_SOURCES = ("dolphin", "wii")
 
 class PlayerConfig(BaseModel):
     output_mode: str
-    mode: object | None = None
+    modes: list[object] = []
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -64,24 +65,26 @@ def load(path: Path = Path("config.toml")) -> Config:
         except tomllib.TOMLDecodeError as e:
             raise ValueError(f"Invalid TOML in {path}: {e}") from e
 
-    default_mode_raw = raw.get("mode")
+    default_modes_raw = raw.get("modes", [])
 
     players = {}
     for port, p in raw.get("players", {}).items():
         try:
             output_mode = p["output_mode"]
             if output_mode == "disabled":
-                mode = None
+                modes = []
             else:
-                mode_raw = p.get("mode") or default_mode_raw
-                if mode_raw is None:
-                    raise ValueError(
-                        f"[players.{port}] has no mode and no global [mode] default is set"
-                    )
-                mode = _resolve_mode(mode_raw)
+                modes_raw = p.get("modes") or None
+                if not modes_raw:
+                    if not default_modes_raw:
+                        raise ValueError(
+                            f"[players.{port}] has no mode and no global [[modes]] default is set"
+                        )
+                    modes_raw = default_modes_raw
+                modes = [_resolve_mode(m) for m in modes_raw]
             players[int(port)] = PlayerConfig(
                 output_mode=output_mode,
-                mode=mode,
+                modes=modes,
             )
         except (KeyError, ValueError) as e:
             raise ValueError(f"[players.{port}] {e}") from e

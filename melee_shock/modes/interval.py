@@ -26,16 +26,24 @@ class IntervalMode(BaseMode):
         @model_validator(mode="after")
         def check_fields(self):
             has_fixed_interval = self.interval is not None
-            has_range_interval = self.interval_min is not None and self.interval_max is not None
+            has_range_interval = (
+                self.interval_min is not None and self.interval_max is not None
+            )
             if not has_fixed_interval and not has_range_interval:
-                raise ValueError("provide either 'interval' or both 'interval_min' and 'interval_max'")
+                raise ValueError(
+                    "provide either 'interval' or both 'interval_min' and 'interval_max'"
+                )
             if has_range_interval and self.interval_min > self.interval_max:
                 raise ValueError("'interval_min' must be <= 'interval_max'")
 
             has_fixed_intensity = self.intensity is not None
-            has_range_intensity = self.intensity_min is not None and self.intensity_max is not None
+            has_range_intensity = (
+                self.intensity_min is not None and self.intensity_max is not None
+            )
             if not has_fixed_intensity and not has_range_intensity:
-                raise ValueError("provide either 'intensity' or both 'intensity_min' and 'intensity_max'")
+                raise ValueError(
+                    "provide either 'intensity' or both 'intensity_min' and 'intensity_max'"
+                )
             if has_range_intensity and self.intensity_min > self.intensity_max:
                 raise ValueError("'intensity_min' must be <= 'intensity_max'")
 
@@ -71,7 +79,8 @@ class IntervalMode(BaseMode):
             self._last_shock_frame = frame
             self._next_interval_frames = self._resolve_interval_frames()
             return ShockEvent(
-                duration=int(self.cfg.duration * 1000), intensity=self._resolve_intensity()
+                duration=int(self.cfg.duration * 1000),
+                intensity=self._resolve_intensity(),
             )
 
         return None

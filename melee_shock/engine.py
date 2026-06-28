@@ -128,8 +128,8 @@ class Engine:
             logger.info("New game detected, resetting engine mode to ON")
 
             for player in self.players.values():
-                if player.mode is not None:
-                    player.mode._new_game()
+                for player_mode in player.modes:
+                    player_mode._new_game()
 
             if self.online:
                 online_port = port_detector(
@@ -184,7 +184,12 @@ class Engine:
                 if player.output_mode == OutputMode.DISABLED:
                     continue
 
-                event: ShockEvent | None = player.mode.update(game_port, state)
+                # last mode that fires an event wins per tick
+                event: ShockEvent | None = None
+                for player_mode in player.modes:
+                    result = player_mode.update(game_port, state)
+                    if result is not None:
+                        event = result
 
                 if event is None:
                     continue

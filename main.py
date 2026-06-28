@@ -18,19 +18,19 @@ logger = logging.getLogger(__name__)
 def build_players(cfg: config.Config) -> dict[int, Player]:
     players = {}
     for port, p in cfg.players.items():
-        if p.mode is not None:
-            mode_cls, _ = get_mode(p.mode.name)
-            mode = mode_cls(p.mode)
-        else:
-            mode = None
+        modes = []
+        for mode_cfg in p.modes:
+            mode_cls, _ = get_mode(mode_cfg.name)
+            modes.append(mode_cls(mode_cfg))
         players[port] = Player(
             output_mode=OutputMode(p.output_mode),
-            mode=mode,
+            modes=modes,
         )
+        mode_names = ", ".join(m.name for m in p.modes) if p.modes else "none"
         logger.info(
             "Player %d: %s via %s",
             port,
-            p.mode.name if p.mode else "none",
+            mode_names,
             p.output_mode,
         )
 

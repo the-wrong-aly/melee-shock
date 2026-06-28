@@ -24,7 +24,6 @@ ctk.set_default_color_theme("blue")
 
 OUTPUT_MODES = ["shock", "vibrate", "disabled"]
 MODE_NAMES = ["damage", "interval", "action"]
-PLAYER_MODE_OPTIONS = ["global"] + MODE_NAMES  # "global" = inherit from global section
 
 # (key, label, type, default)  types: "intensity" | "int" | "float" | "str" | "bool"
 # "intensity" renders as a 0-100 slider; behaves as int for save/load
@@ -70,14 +69,20 @@ class App(ctk.CTk):
         self._log_q: queue.Queue = queue.Queue()
         self._worker: threading.Thread | None = None
         self._lockable: list = []
-        self._mode_param_lockable: list = []
-        self._player_param_lockable: dict[int, list] = {p: [] for p in range(1, 5)}
+        # Global and per-player mode entries. Each entry is a dict:
+        #   name_var, params_vars, frame, params_frame, lockable
+        self._global_mode_entries: list = []
+        self._global_modes_container: ctk.CTkFrame | None = None
+        self._player_mode_entries: dict[int, list] = {p: [] for p in range(1, 5)}
+        self._player_modes_container: dict[int, ctk.CTkFrame] = {}
+        self._player_global_mode_labels: dict[int, ctk.CTkLabel] = {}
 
         self._setup_logging()
         self._build_ui()
         self._poll_logs()
 
-    # logging
+    # ── logging ──────────────────────────────────────────────────────────────
+
     def _setup_logging(self) -> None:
         handler = _QueueHandler(self._log_q)
         handler.setFormatter(
@@ -93,12 +98,12 @@ class App(ctk.CTk):
         self._lockable.append(widget)
         return widget
 
-    # UI
+    # ── UI ───────────────────────────────────────────────────────────────────
+
     def _build_ui(self) -> None:
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
-        # Config file bar (always visible)
         bar = ctk.CTkFrame(self)
         bar.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 4))
         bar.grid_columnconfigure(1, weight=1)
@@ -119,7 +124,6 @@ class App(ctk.CTk):
             ctk.CTkButton(bar, text="Save", width=60, command=self._save_config)
         ).grid(row=0, column=4, padx=(4, 12), pady=8)
 
-        # Tabview
         tabs = ctk.CTkTabview(self)
         tabs.grid(row=1, column=0, sticky="nsew", padx=12, pady=4)
         tabs.add("Settings")
@@ -127,7 +131,6 @@ class App(ctk.CTk):
         self._build_settings_tab(tabs.tab("Settings"))
         self._build_log_tab(tabs.tab("Log"))
 
-        # Controls (always visible)
         ctrl = ctk.CTkFrame(self)
         ctrl.grid(row=2, column=0, sticky="ew", padx=12, pady=(4, 12))
         self._status_var = tk.StringVar(value="Stopped")
@@ -182,7 +185,6 @@ class App(ctk.CTk):
         ).grid(row=r, column=1, sticky="w", padx=4, pady=3)
         r += 1
 
-        # Dolphin sub-fields
         self._dolphin_frame = ctk.CTkFrame(scroll, fg_color="transparent")
         self._dolphin_frame.grid(row=r, column=0, columnspan=3, sticky="ew")
         self._dolphin_frame.grid_columnconfigure(1, weight=1)
@@ -220,7 +222,6 @@ class App(ctk.CTk):
             )
         ).grid(row=1, column=2, padx=(4, 8), pady=3)
 
-        # Wii sub-fields
         self._wii_frame = ctk.CTkFrame(scroll, fg_color="transparent")
         self._wii_frame.grid(row=r, column=0, columnspan=3, sticky="ew")
         self._wii_frame.grid_columnconfigure(1, weight=1)
@@ -243,7 +244,6 @@ class App(ctk.CTk):
             ctk.CTkEntry(self._wii_frame, textvariable=self._wii_port_var, width=100)
         ).grid(row=1, column=1, sticky="w", padx=4, pady=3)
 
-        # Debug (applies to both sources)
         ctk.CTkLabel(scroll, text="Debug").grid(
             row=r, column=0, sticky="w", padx=(20, 8), pady=3
         )
@@ -279,26 +279,26 @@ class App(ctk.CTk):
         ).grid(row=r, column=1, sticky="ew", padx=4, pady=3)
         r += 1
 
-        ctk.CTkLabel(scroll, text="Default mode").grid(
-            row=r, column=0, sticky="w", padx=(20, 8), pady=3
+        ctk.CTkLabel(scroll, text="Default modes").grid(
+            row=r, column=0, sticky="w", padx=(20, 8), pady=(6, 2)
         )
-        self._mode_var = tk.StringVar(value="damage")
-        self._lw(
-            ctk.CTkOptionMenu(
-                scroll,
-                variable=self._mode_var,
-                values=MODE_NAMES,
-                width=120,
-                command=self._on_mode_changed,
-            )
-        ).grid(row=r, column=1, sticky="w", padx=4, pady=3)
         r += 1
 
-        self._mode_params_frame = ctk.CTkFrame(scroll, fg_color="transparent")
-        self._mode_params_frame.grid(row=r, column=0, columnspan=3, sticky="ew")
-        self._mode_params_frame.grid_columnconfigure(1, weight=1)
-        self._mode_param_vars: dict[str, tk.Variable] = {}
-        self._build_mode_params("damage")
+        global_modes_container = ctk.CTkFrame(scroll, fg_color="transparent")
+        global_modes_container.grid(row=r, column=0, columnspan=3, sticky="ew")
+        global_modes_container.grid_columnconfigure(0, weight=1)
+        self._global_modes_container = global_modes_container
+        r += 1
+
+        self._lw(
+            ctk.CTkButton(
+                scroll,
+                text="+ Add mode",
+                width=110,
+                height=26,
+                command=lambda: self._add_global_mode(),
+            )
+        ).grid(row=r, column=0, sticky="w", padx=(20, 8), pady=(2, 4))
         r += 1
 
         # Players
@@ -308,9 +308,6 @@ class App(ctk.CTk):
         r += 1
 
         self._player_vars: dict[int, tk.StringVar] = {}
-        self._player_mode_vars: dict[int, tk.StringVar] = {}
-        self._player_mode_param_vars: dict[int, dict[str, tk.Variable]] = {}
-        self._player_mode_params_frames: dict[int, ctk.CTkFrame] = {}
         self._player_settings_frames: dict[int, ctk.CTkFrame] = {}
 
         for port in range(1, 5):
@@ -319,7 +316,6 @@ class App(ctk.CTk):
             pf.grid_columnconfigure(1, weight=1)
             r += 1
 
-            # Header row: label | output mode dropdown | − button
             ctk.CTkLabel(pf, text=f"P{port}").grid(
                 row=0, column=0, sticky="w", padx=(20, 8), pady=3
             )
@@ -337,39 +333,38 @@ class App(ctk.CTk):
                 )
             ).grid(row=0, column=2, padx=(4, 8), pady=3)
 
-            # Collapsible settings sub-frame (mode override + optional params)
             sf = ctk.CTkFrame(pf, fg_color="transparent")
             sf.grid(row=1, column=0, columnspan=3, sticky="ew")
-            sf.grid_columnconfigure(1, weight=1)
+            sf.grid_columnconfigure(0, weight=1)
             self._player_settings_frames[port] = sf
 
-            ctk.CTkLabel(sf, text="Mode").grid(
-                row=0, column=0, sticky="w", padx=(36, 8), pady=2
+            modes_container = ctk.CTkFrame(sf, fg_color="transparent")
+            modes_container.grid(row=0, column=0, columnspan=3, sticky="ew")
+            modes_container.grid_columnconfigure(0, weight=1)
+            self._player_modes_container[port] = modes_container
+
+            global_lbl = ctk.CTkLabel(
+                modes_container,
+                text="(using global modes)",
+                text_color="gray",
+                anchor="w",
             )
-            mode_var = tk.StringVar(value="global")
-            self._player_mode_vars[port] = mode_var
+            global_lbl.grid(row=0, column=0, sticky="w", padx=(52, 8), pady=(2, 0))
+            self._player_global_mode_labels[port] = global_lbl
+
             self._lw(
-                ctk.CTkOptionMenu(
+                ctk.CTkButton(
                     sf,
-                    variable=mode_var,
-                    values=PLAYER_MODE_OPTIONS,
-                    width=120,
-                    command=lambda _, p=port: self._on_player_mode_changed(p),
+                    text="+ Add mode",
+                    width=110,
+                    height=26,
+                    command=lambda p=port: self._add_player_mode(p),
                 )
-            ).grid(row=0, column=1, sticky="w", padx=4, pady=2)
+            ).grid(row=1, column=0, sticky="w", padx=(36, 8), pady=(2, 4))
 
-            params_frame = ctk.CTkFrame(sf, fg_color="transparent")
-            params_frame.grid(row=1, column=0, columnspan=3, sticky="ew")
-            params_frame.grid_columnconfigure(1, weight=1)
-            self._player_mode_params_frames[port] = params_frame
-            self._player_mode_param_vars[port] = {}
-
-            # Wire output-mode trace after settings frame exists
             out_var.trace_add(
                 "write", lambda *_, p=port: self._on_player_output_changed(p)
             )
-            # "global" default → params frame starts hidden
-            params_frame.grid_remove()
             sf.grid_remove()
 
         # Shockers
@@ -419,60 +414,121 @@ class App(ctk.CTk):
         sb.grid(row=0, column=1, sticky="ns")
         self._log_text.grid(row=0, column=0, sticky="nsew")
 
-    # global mode params
-    def _build_mode_params(self, mode_name: str) -> None:
-        self._mode_param_lockable.clear()
-        for w in self._mode_params_frame.winfo_children():
+    # ── shared mode entry helpers ─────────────────────────────────────────────
+
+    def _add_mode_entry(
+        self,
+        container: ctk.CTkFrame,
+        entries: list,
+        mode_name: str = "damage",
+        indent: int = 20,
+        on_change=None,
+    ) -> dict:
+        row = len(entries)
+
+        entry_frame = ctk.CTkFrame(container, fg_color="transparent")
+        entry_frame.grid(row=row, column=0, sticky="ew", pady=(2, 0))
+        entry_frame.grid_columnconfigure(1, weight=1)
+
+        name_var = tk.StringVar(value=mode_name)
+        lockable: list = []
+
+        dropdown = ctk.CTkOptionMenu(
+            entry_frame, variable=name_var, values=MODE_NAMES, width=120
+        )
+        dropdown.grid(row=0, column=0, sticky="w", padx=(indent, 4), pady=2)
+        lockable.append(dropdown)
+
+        remove_btn = ctk.CTkButton(
+            entry_frame, text="×", width=28, fg_color="#555", hover_color="#c0392b"
+        )
+        remove_btn.grid(row=0, column=2, padx=(4, 8), pady=2)
+        lockable.append(remove_btn)
+
+        params_frame = ctk.CTkFrame(entry_frame, fg_color="transparent")
+        params_frame.grid(row=1, column=0, columnspan=3, sticky="ew")
+        params_frame.grid_columnconfigure(1, weight=1)
+
+        entry: dict = {
+            "name_var": name_var,
+            "params_vars": {},
+            "frame": entry_frame,
+            "params_frame": params_frame,
+            "lockable": lockable,
+            "indent": indent,
+            "on_change": on_change,
+        }
+        entries.append(entry)
+
+        remove_btn.configure(
+            command=lambda e=entry: self._remove_mode_entry(entries, e)
+        )
+        if on_change:
+            on_change()
+        name_var.trace_add(
+            "write",
+            lambda *_, e=entry: self._rebuild_mode_params_for_entry(
+                e, e["name_var"].get()
+            ),
+        )
+
+        self._rebuild_mode_params_for_entry(entry, mode_name)
+        return entry
+
+    def _remove_mode_entry(self, entries: list, entry: dict) -> None:
+        if entry in entries:
+            entries.remove(entry)
+        entry["frame"].destroy()
+        for i, e in enumerate(entries):
+            e["frame"].grid(row=i, column=0, sticky="ew", pady=(2, 0))
+        on_change = entry.get("on_change")
+        if on_change:
+            on_change()
+
+    def _rebuild_mode_params_for_entry(self, entry: dict, mode_name: str) -> None:
+        frame = entry["params_frame"]
+        for w in frame.winfo_children():
             w.destroy()
-        self._mode_param_vars.clear()
+        # Keep only dropdown + remove button (indices 0 and 1)
+        entry["lockable"] = entry["lockable"][:2]
+        entry["params_vars"].clear()
+        indent = entry.get("indent", 20) + 16
         for i, (key, label, typ, default) in enumerate(MODE_FIELDS[mode_name]):
-            ctk.CTkLabel(self._mode_params_frame, text=label).grid(
-                row=i, column=0, sticky="w", padx=(36, 8), pady=2
+            ctk.CTkLabel(frame, text=label).grid(
+                row=i, column=0, sticky="w", padx=(indent, 8), pady=2
             )
             if typ == "intensity_range":
                 self._build_intensity_range_block(
-                    self._mode_params_frame, i, self._mode_param_vars, self._mode_param_lockable
+                    frame, i, entry["params_vars"], entry["lockable"]
                 )
                 continue
             elif typ == "interval_range":
                 self._build_interval_range_block(
-                    self._mode_params_frame, i, self._mode_param_vars, self._mode_param_lockable
+                    frame, i, entry["params_vars"], entry["lockable"]
                 )
                 continue
             elif typ == "bool":
                 var: tk.Variable = tk.BooleanVar(value=False)
                 widget = ctk.CTkCheckBox(
-                    self._mode_params_frame,
-                    text="",
-                    variable=var,
-                    onvalue=True,
-                    offvalue=False,
+                    frame, text="", variable=var, onvalue=True, offvalue=False
                 )
             elif typ == "intensity":
                 var = tk.IntVar(value=0)
-                val_lbl = ctk.CTkLabel(
-                    self._mode_params_frame, text="0", width=52, anchor="w"
-                )
+                val_lbl = ctk.CTkLabel(frame, text="0", width=52, anchor="w")
                 val_lbl.grid(row=i, column=2, padx=(4, 8), pady=2)
                 var.trace_add(
                     "write",
                     lambda *_, v=var, lbl=val_lbl: lbl.configure(text=str(v.get())),
                 )
                 widget = ctk.CTkSlider(
-                    self._mode_params_frame,
-                    from_=0,
-                    to=100,
-                    number_of_steps=100,
-                    variable=var,
+                    frame, from_=0, to=100, number_of_steps=100, variable=var
                 )
             else:
                 var = tk.StringVar(value=default if default is not None else "")
-                widget = ctk.CTkEntry(
-                    self._mode_params_frame, textvariable=var, width=160
-                )
+                widget = ctk.CTkEntry(frame, textvariable=var, width=160)
             widget.grid(row=i, column=1, sticky="ew", padx=4, pady=2)
-            self._mode_param_lockable.append(widget)
-            self._mode_param_vars[key] = var
+            entry["lockable"].append(widget)
+            entry["params_vars"][key] = var
 
     def _build_intensity_range_block(
         self, frame: ctk.CTkFrame, row: int, vars_dict: dict, lockable: list
@@ -494,7 +550,11 @@ class App(ctk.CTk):
         )
 
         toggle = ctk.CTkCheckBox(
-            sub, text="Random range", variable=use_range_var, onvalue=True, offvalue=False
+            sub,
+            text="Random range",
+            variable=use_range_var,
+            onvalue=True,
+            offvalue=False,
         )
         toggle.grid(row=1, column=0, columnspan=3, sticky="w", pady=(2, 0))
 
@@ -544,7 +604,6 @@ class App(ctk.CTk):
             "write", lambda *_: _show_range() if use_range_var.get() else _show_fixed()
         )
 
-        # Grid all widgets first so grid_remove works, then set initial state
         fixed_slider.grid(row=0, column=0, columnspan=2, sticky="ew")
         fixed_val_lbl.grid(row=0, column=2, padx=(4, 0))
         min_label.grid(row=2, column=0, sticky="w", padx=(0, 4))
@@ -574,7 +633,11 @@ class App(ctk.CTk):
         fixed_entry = ctk.CTkEntry(sub, textvariable=fixed_var, width=160)
 
         toggle = ctk.CTkCheckBox(
-            sub, text="Random range", variable=use_range_var, onvalue=True, offvalue=False
+            sub,
+            text="Random range",
+            variable=use_range_var,
+            onvalue=True,
+            offvalue=False,
         )
         toggle.grid(row=1, column=0, columnspan=2, sticky="w", pady=(2, 0))
 
@@ -604,7 +667,6 @@ class App(ctk.CTk):
             "write", lambda *_: _show_range() if use_range_var.get() else _show_fixed()
         )
 
-        # Grid all initially so grid_remove works, then apply initial state
         fixed_entry.grid(row=0, column=0, columnspan=2, sticky="ew")
         min_label.grid(row=2, column=0, sticky="w", padx=(0, 4))
         min_entry.grid(row=2, column=1, sticky="ew")
@@ -618,56 +680,36 @@ class App(ctk.CTk):
         vars_dict["_interval_use_range"] = use_range_var
         lockable.extend([fixed_entry, toggle, min_entry, max_entry])
 
-    def _on_mode_changed(self, mode_name: str) -> None:
-        self._build_mode_params(mode_name)
+    # ── global / per-player mode management ──────────────────────────────────
 
-    # per-player mode params
-    def _build_player_mode_params(self, port: int, mode_name: str) -> None:
-        self._player_param_lockable[port].clear()
-        frame = self._player_mode_params_frames[port]
-        for w in frame.winfo_children():
-            w.destroy()
-        self._player_mode_param_vars[port].clear()
-        for i, (key, label, typ, default) in enumerate(MODE_FIELDS[mode_name]):
-            ctk.CTkLabel(frame, text=label).grid(
-                row=i, column=0, sticky="w", padx=(48, 8), pady=2
-            )
-            if typ == "intensity_range":
-                self._build_intensity_range_block(
-                    frame, i, self._player_mode_param_vars[port], self._player_param_lockable[port]
-                )
-                continue
-            elif typ == "interval_range":
-                self._build_interval_range_block(
-                    frame, i, self._player_mode_param_vars[port], self._player_param_lockable[port]
-                )
-                continue
-            elif typ == "bool":
-                var: tk.Variable = tk.BooleanVar(value=False)
-                widget = ctk.CTkCheckBox(
-                    frame,
-                    text="",
-                    variable=var,
-                    onvalue=True,
-                    offvalue=False,
-                )
-            elif typ == "intensity":
-                var = tk.IntVar(value=0)
-                val_lbl = ctk.CTkLabel(frame, text="0", width=52, anchor="w")
-                val_lbl.grid(row=i, column=2, padx=(4, 8), pady=2)
-                var.trace_add(
-                    "write",
-                    lambda *_, v=var, lbl=val_lbl: lbl.configure(text=str(v.get())),
-                )
-                widget = ctk.CTkSlider(
-                    frame, from_=0, to=100, number_of_steps=100, variable=var
-                )
-            else:
-                var = tk.StringVar(value=default if default is not None else "")
-                widget = ctk.CTkEntry(frame, textvariable=var, width=160)
-            widget.grid(row=i, column=1, sticky="ew", padx=4, pady=2)
-            self._player_param_lockable[port].append(widget)
-            self._player_mode_param_vars[port][key] = var
+    def _add_global_mode(self, mode_name: str = "damage") -> dict:
+        return self._add_mode_entry(
+            self._global_modes_container,
+            self._global_mode_entries,
+            mode_name,
+            indent=20,
+        )
+
+    def _add_player_mode(self, port: int, mode_name: str = "damage") -> dict:
+        return self._add_mode_entry(
+            self._player_modes_container[port],
+            self._player_mode_entries[port],
+            mode_name,
+            indent=36,
+            on_change=lambda: self._update_player_global_label(port),
+        )
+
+    def _update_player_global_label(self, port: int) -> None:
+        lbl = self._player_global_mode_labels.get(port)
+        if lbl is None:
+            return
+        if (
+            self._player_vars[port].get() != "disabled"
+            and not self._player_mode_entries[port]
+        ):
+            lbl.grid()
+        else:
+            lbl.grid_remove()
 
     def _on_player_output_changed(self, port: int) -> None:
         sf = self._player_settings_frames[port]
@@ -675,80 +717,18 @@ class App(ctk.CTk):
             sf.grid_remove()
         else:
             sf.grid()
-
-    def _on_player_mode_changed(self, port: int) -> None:
-        mode_name = self._player_mode_vars[port].get()
-        frame = self._player_mode_params_frames[port]
-        if mode_name == "global":
-            self._player_param_lockable[port].clear()
-            for w in frame.winfo_children():
-                w.destroy()
-            self._player_mode_param_vars[port].clear()
-            frame.grid_remove()
-        else:
-            frame.grid()
-            self._build_player_mode_params(port, mode_name)
+        self._update_player_global_label(port)
 
     def _on_intensity_changed(self, *_) -> None:
         self._intensity_label.configure(text=str(self._intensity_var.get()))
 
-    def _make_global_mode(self) -> object:
-        mode_name = self._mode_var.get()
-        mode_cls, config_cls = get_mode(mode_name)
-        params: dict = {"name": mode_name}
-        for key, _, typ, _ in MODE_FIELDS[mode_name]:
-            var = self._mode_param_vars.get(key)
-            if var is None:
-                continue
-            raw = var.get()
-            if typ == "intensity_range":
-                use_range = self._mode_param_vars.get("_intensity_use_range")
-                if use_range and use_range.get():
-                    for rk in ("intensity_min", "intensity_max"):
-                        rv = self._mode_param_vars.get(rk)
-                        if rv is not None:
-                            params[rk] = int(rv.get())
-                else:
-                    s = str(raw).strip()
-                    if s:
-                        params[key] = int(s)
-            elif typ == "interval_range":
-                use_range = self._mode_param_vars.get("_interval_use_range")
-                if use_range and use_range.get():
-                    for rk in ("interval_min", "interval_max"):
-                        rv = self._mode_param_vars.get(rk)
-                        if rv is not None:
-                            s = str(rv.get()).strip()
-                            if s:
-                                params[rk] = float(s)
-                else:
-                    s = str(raw).strip()
-                    if s:
-                        params[key] = float(s)
-            elif typ == "bool":
-                params[key] = bool(raw)
-            elif typ in ("int", "intensity"):
-                s = str(raw).strip()
-                if s:
-                    params[key] = int(s)
-            elif typ == "float":
-                s = str(raw).strip()
-                if s:
-                    params[key] = float(s)
-            else:
-                s = str(raw).strip()
-                if s:
-                    parts = [p.strip() for p in s.split(",") if p.strip()]
-                    params[key] = parts[0] if len(parts) == 1 else parts
-        return mode_cls(config_cls.model_validate(params))
+    # ── mode object builders ──────────────────────────────────────────────────
 
-    def _make_player_mode(self, port: int) -> object:
-        mode_name = self._player_mode_vars[port].get()
-        if mode_name == "global":
-            return self._make_global_mode()
+    def _make_mode_from_entry(self, entry: dict) -> object:
+        mode_name = entry["name_var"].get()
         mode_cls, config_cls = get_mode(mode_name)
         params: dict = {"name": mode_name}
-        pvars = self._player_mode_param_vars[port]
+        pvars = entry["params_vars"]
         for key, _, typ, _ in MODE_FIELDS[mode_name]:
             var = pvars.get(key)
             if var is None:
@@ -795,7 +775,17 @@ class App(ctk.CTk):
                     params[key] = parts[0] if len(parts) == 1 else parts
         return mode_cls(config_cls.model_validate(params))
 
-    # log
+    def _make_global_modes(self) -> list:
+        return [self._make_mode_from_entry(e) for e in self._global_mode_entries]
+
+    def _make_player_modes(self, port: int) -> list:
+        entries = self._player_mode_entries[port]
+        if not entries:
+            return self._make_global_modes()
+        return [self._make_mode_from_entry(e) for e in entries]
+
+    # ── log ──────────────────────────────────────────────────────────────────
+
     def _append_log(self, msg: str) -> None:
         self._log_text.configure(state="normal")
         self._log_text.insert("end", msg + "\n")
@@ -810,7 +800,8 @@ class App(ctk.CTk):
             pass
         self.after(100, self._poll_logs)
 
-    # config file ops
+    # ── config file ops ───────────────────────────────────────────────────────
+
     def _browse(self) -> None:
         p = filedialog.askopenfilename(
             title="Select config file",
@@ -856,36 +847,39 @@ class App(ctk.CTk):
             cfg.global_max_intensity if cfg.global_max_intensity is not None else 0
         )
 
-        # Global mode
-        global_mode_raw = raw.get("mode")
-        if global_mode_raw:
-            mode_name = global_mode_raw.get("name", "damage")
-            self._mode_var.set(mode_name)
-            self._build_mode_params(mode_name)
-            self._load_mode_fields(global_mode_raw, mode_name, self._mode_param_vars)
+        # Global modes
+        for entry in self._global_mode_entries:
+            entry["frame"].destroy()
+        self._global_mode_entries.clear()
+
+        global_modes_raw = raw.get("modes", [])
+        for mode_raw in global_modes_raw:
+            mode_name = mode_raw.get("name", "damage")
+            entry = self._add_global_mode(mode_name)
+            self._load_mode_fields(mode_raw, mode_name, entry["params_vars"])
 
         # Per-player
         raw_players = raw.get("players", {})
         for port in range(1, 5):
+            for entry in self._player_mode_entries[port]:
+                entry["frame"].destroy()
+            self._player_mode_entries[port].clear()
+
             if port in cfg.players:
                 player_cfg = cfg.players[port]
                 self._player_vars[port].set(player_cfg.output_mode)
                 if player_cfg.output_mode != "disabled":
                     player_raw = raw_players.get(str(port), {})
-                    if "mode" in player_raw:
-                        mode_name = player_raw["mode"].get("name", "damage")
-                        self._player_mode_vars[port].set(mode_name)
-                        self._on_player_mode_changed(port)
+                    modes_raw = player_raw.get("modes", [])
+                    for mode_raw in modes_raw:
+                        mode_name = mode_raw.get("name", "damage")
+                        entry = self._add_player_mode(port, mode_name)
                         self._load_mode_fields(
-                            player_raw["mode"],
-                            mode_name,
-                            self._player_mode_param_vars[port],
+                            mode_raw, mode_name, entry["params_vars"]
                         )
-                    else:
-                        self._player_mode_vars[port].set("global")
-                        self._on_player_mode_changed(port)
             else:
                 self._player_vars[port].set("disabled")
+            self._update_player_global_label(port)
 
         logger.info(f"Loaded {path.name}")
 
@@ -980,10 +974,11 @@ class App(ctk.CTk):
                 lines.append(f"port = {wii_port}")
         lines += [f"debug = {'true' if self._debug_var.get() else 'false'}", ""]
 
-        mode_name = self._mode_var.get()
-        lines += ["[mode]", f'name = "{mode_name}"']
-        lines += self._mode_field_lines(mode_name, self._mode_param_vars)
-        lines.append("")
+        for entry in self._global_mode_entries:
+            mode_name = entry["name_var"].get()
+            lines += [f"[[modes]]", f'name = "{mode_name}"']
+            lines += self._mode_field_lines(mode_name, entry["params_vars"])
+            lines.append("")
 
         active = {p for p in range(1, 5) if self._player_vars[p].get() != "disabled"}
         for port in sorted(active):
@@ -992,12 +987,10 @@ class App(ctk.CTk):
                 f'output_mode = "{self._player_vars[port].get()}"',
                 "",
             ]
-            player_mode = self._player_mode_vars[port].get()
-            if player_mode != "global":
-                lines += [f"[players.{port}.mode]", f'name = "{player_mode}"']
-                lines += self._mode_field_lines(
-                    player_mode, self._player_mode_param_vars[port]
-                )
+            for entry in self._player_mode_entries[port]:
+                entry_mode = entry["name_var"].get()
+                lines += [f"[[players.{port}.modes]]", f'name = "{entry_mode}"']
+                lines += self._mode_field_lines(entry_mode, entry["params_vars"])
                 lines.append("")
 
         return "\n".join(lines)
@@ -1056,7 +1049,8 @@ class App(ctk.CTk):
                         lines.append(f"{key} = [{items}]")
         return lines
 
-    # connect / stop
+    # ── connect / stop ────────────────────────────────────────────────────────
+
     def _on_connect(self) -> None:
         if self._worker and self._worker.is_alive():
             return
@@ -1083,12 +1077,12 @@ class App(ctk.CTk):
             players: dict[int, Player] = {}
             for port in sorted(ports):
                 try:
-                    mode = self._make_player_mode(port)
+                    modes = self._make_player_modes(port)
                 except (ValueError, ValidationError) as e:
                     logger.error(f"P{port} mode settings: {e}")
                     return
                 players[port] = Player(
-                    output_mode=OutputMode(self._player_vars[port].get()), mode=mode
+                    output_mode=OutputMode(self._player_vars[port].get()), modes=modes
                 )
 
             self._set_status("Looking for PiShock…")
@@ -1134,7 +1128,7 @@ class App(ctk.CTk):
             )
             self._set_status("● Running")
             self.after(0, self._ui_running)
-            self._engine.run()  # blocks until stopped
+            self._engine.run()
 
         except Exception:
             logger.exception("Unexpected error")
@@ -1198,18 +1192,30 @@ class App(ctk.CTk):
         threading.Thread(target=run, daemon=True).start()
 
     def _lock_settings(self) -> None:
-        widgets = list(self._lockable) + list(self._mode_param_lockable)
-        for pl in self._player_param_lockable.values():
-            widgets.extend(pl)
+        widgets = list(self._lockable)
+        for entry in self._global_mode_entries:
+            widgets.extend(entry["lockable"])
+        for entries in self._player_mode_entries.values():
+            for entry in entries:
+                widgets.extend(entry["lockable"])
         for w in widgets:
-            w.configure(state="disabled")
+            try:
+                w.configure(state="disabled")
+            except Exception:
+                pass
 
     def _unlock_settings(self) -> None:
-        widgets = list(self._lockable) + list(self._mode_param_lockable)
-        for pl in self._player_param_lockable.values():
-            widgets.extend(pl)
+        widgets = list(self._lockable)
+        for entry in self._global_mode_entries:
+            widgets.extend(entry["lockable"])
+        for entries in self._player_mode_entries.values():
+            for entry in entries:
+                widgets.extend(entry["lockable"])
         for w in widgets:
-            w.configure(state="normal")
+            try:
+                w.configure(state="normal")
+            except Exception:
+                pass
 
     def _ui_running(self) -> None:
         self._lock_settings()
@@ -1225,7 +1231,8 @@ class App(ctk.CTk):
         self._status_var.set("Stopped")
         self._clear_shockers()
 
-    # lifecycle
+    # ── lifecycle ─────────────────────────────────────────────────────────────
+
     def on_close(self) -> None:
         if self._engine:
             self._engine.stop()

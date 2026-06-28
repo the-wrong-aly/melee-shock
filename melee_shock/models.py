@@ -13,4 +13,4 @@ class OutputMode(Enum):
 @dataclass
 class Player:
     output_mode: OutputMode
-    mode: BaseMode | None
+    modes: list[BaseMode]

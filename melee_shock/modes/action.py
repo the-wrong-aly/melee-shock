@@ -40,6 +40,7 @@ class ActionMode(BaseMode):
             return None
 
         action = player_state.action
+        print(action)
         if self.cfg.do_while:
             if action in self._actions:
                 now = time.monotonic()

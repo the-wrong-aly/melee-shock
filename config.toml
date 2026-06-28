@@ -5,15 +5,20 @@ type = "wii"
 ip = "192.168.137.140"
 debug = true
 
-[mode]
+[[modes]]
 name      = "action"
 intensity = 1
-action = ["SHIELD", "GRAB"]
-do_while = true
+action    = ["SHIELD", "GRAB"]
+do_while  = true
 
 [players.1]
 output_mode = "vibrate"
 
+[[players.1.modes]]
+name      = "action"
+intensity = 1
+action    = ["SHIELD", "GRAB"]
+do_while  = true
+
 [players.2]
 output_mode = "disabled"
-

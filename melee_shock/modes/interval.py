@@ -15,10 +15,10 @@ class IntervalMode(BaseMode):
 
     class Config(BaseModel):
         name: str = "interval"
-        interval: float | None = None
+        interval: float | None = 5
         interval_min: float | None = None
         interval_max: float | None = None
-        intensity: int | None = None
+        intensity: int | None = 10
         intensity_min: int | None = None
         intensity_max: int | None = None
         duration: float = 0.01

@@ -18,5 +18,5 @@ class BaseMode(ABC):
         pass
 
     @abstractmethod
-    def update(self, gamestate: GameState) -> ShockEvent | None:
+    def update(self, port: int, gamestate: GameState) -> ShockEvent | None:
         pass

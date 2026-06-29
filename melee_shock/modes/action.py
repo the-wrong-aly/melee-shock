@@ -19,7 +19,7 @@ class ActionMode(BaseMode):
 
     class Config(BaseModel):
         name: str = "action"
-        intensity: int
+        intensity: int = 10
         action: str | list[str]
         do_while: bool = False
 

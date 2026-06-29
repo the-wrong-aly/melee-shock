@@ -17,7 +17,7 @@ class DamageMode(BaseMode):
 
     class Config(BaseModel):
         name: str = "damage"
-        max_intensity: int
+        max_intensity: int = 10
         min_intensity: int = 1
         min_duration: float = 0
 

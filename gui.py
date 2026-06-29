@@ -13,6 +13,7 @@ from pydantic import ValidationError
 import melee_shock.modes.action  # noqa – triggers @register_mode
 import melee_shock.modes.damage  # noqa
 import melee_shock.modes.interval  # noqa
+import melee_shock.modes.meter  # noqa
 import melee_shock.config as config_module
 from melee_shock.apis.pishock import PiShockSerialAPI
 from melee_shock.engine import Engine
@@ -25,26 +26,33 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 OUTPUT_MODES = ["shock", "vibrate", "disabled"]
-MODE_NAMES = ["damage", "interval", "action"]
+MODE_NAMES = ["damage", "interval", "action", "meter"]
 
 # (key, label, type, default)  types: "intensity" | "int" | "float" | "str" | "bool"
 # "intensity" renders as a 0-100 slider; behaves as int for save/load
 # default is the placeholder shown when field is empty (None = no placeholder)
 MODE_FIELDS: dict[str, list[tuple[str, str, str, str | None]]] = {
     "damage": [
-        ("max_intensity", "Max intensity", "intensity", None),
-        ("min_intensity", "Min intensity", "intensity", None),
+        ("max_intensity", "Max intensity", "intensity", "10"),
+        ("min_intensity", "Min intensity", "intensity", "1"),
         ("min_duration", "Min duration (s)", "float", "0"),
     ],
     "interval": [
-        ("interval", "Interval (s)", "interval_range", None),
-        ("intensity", "Intensity", "intensity_range", None),
-        ("duration", "Duration (s)", "float", "0.1"),
+        ("interval", "Interval (s)", "interval_range", "5"),
+        ("intensity", "Intensity", "intensity_range", "10"),
+        ("duration", "Duration (s)", "float", "0.01"),
     ],
     "action": [
         ("action", "Action(s)", "str", None),
-        ("intensity", "Intensity", "intensity", None),
+        ("intensity", "Intensity", "intensity", "10"),
         ("do_while", "Repeat while held", "bool", None),
+    ],
+    "meter": [
+        ("intensity", "Intensity", "intensity", "10"),
+        ("duration", "Duration (s)", "float", "1"),
+        ("num_bars", "Num bars", "int", "3"),
+        ("percent_per_bar", "Percent per bar", "int", "100"),
+        ("taunt_meter", "Taunt meter", "int", "0"),
     ],
 }
 
@@ -90,6 +98,10 @@ class App(ctk.CTk):
         }
         self._player_modes_container: dict[int, ctk.CTkFrame] = {}
         self._player_global_mode_labels: dict[int, ctk.CTkLabel] = {}
+        self._meter_frames: dict[int, ctk.CTkFrame] = {}
+        self._meter_bars: dict[int, ctk.CTkProgressBar] = {}
+        self._meter_lbls: dict[int, ctk.CTkLabel] = {}
+        self._meter_poll_active = False
 
         self._setup_logging()
         self._build_ui()
@@ -382,6 +394,21 @@ class App(ctk.CTk):
                 )
             ).grid(row=1, column=0, sticky="w", padx=(36, 8), pady=(2, 4))
 
+            mf = ctk.CTkFrame(sf, fg_color="transparent")
+            mf.grid(
+                row=2, column=0, columnspan=3, sticky="ew", padx=(36, 8), pady=(0, 4)
+            )
+            mf.grid_columnconfigure(0, weight=1)
+            bar = ctk.CTkProgressBar(mf)
+            bar.set(0)
+            bar.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+            lbl = ctk.CTkLabel(mf, text="0 / 0 bars", width=90, anchor="w")
+            lbl.grid(row=0, column=1)
+            mf.grid_remove()
+            self._meter_frames[port] = mf
+            self._meter_bars[port] = bar
+            self._meter_lbls[port] = lbl
+
             out_var.trace_add(
                 "write", lambda *_, p=port: self._on_player_output_changed(p)
             )
@@ -520,6 +547,7 @@ class App(ctk.CTk):
                     entry.params_vars,
                     entry.lockable,
                     key_prefix=typ.replace("_range", ""),
+                    default=default,
                 )
                 continue
             if typ == "bool":
@@ -528,8 +556,9 @@ class App(ctk.CTk):
                     frame, text="", variable=var, onvalue=True, offvalue=False
                 )
             elif typ == "intensity":
-                var = tk.IntVar(value=0)
-                val_lbl = ctk.CTkLabel(frame, text="0", width=52, anchor="w")
+                initial = int(default) if default is not None else 0
+                var = tk.IntVar(value=initial)
+                val_lbl = ctk.CTkLabel(frame, text=str(initial), width=52, anchor="w")
                 val_lbl.grid(row=i, column=2, padx=(4, 8), pady=2)
                 var.trace_add(
                     "write",
@@ -552,6 +581,7 @@ class App(ctk.CTk):
         vars_dict: dict,
         lockable: list,
         key_prefix: str,
+        default: str | None = None,
     ) -> None:
         """Builds an intensity (slider) or interval (entry) fixed/range toggle block."""
         is_intensity = key_prefix == "intensity"
@@ -563,7 +593,7 @@ class App(ctk.CTk):
         use_range_var = tk.BooleanVar(value=False)
 
         def make_slider(var: tk.IntVar):
-            lbl = ctk.CTkLabel(sub, text="0", width=52, anchor="w")
+            lbl = ctk.CTkLabel(sub, text=str(var.get()), width=52, anchor="w")
             var.trace_add(
                 "write", lambda *_, v=var, l=lbl: l.configure(text=str(v.get()))
             )
@@ -572,14 +602,16 @@ class App(ctk.CTk):
             ), lbl
 
         if is_intensity:
-            fixed_var: tk.Variable = tk.IntVar(value=0)
+            fixed_var: tk.Variable = tk.IntVar(
+                value=int(default) if default is not None else 0
+            )
             fixed_widget, fixed_extra = make_slider(fixed_var)
             min_var: tk.Variable = tk.IntVar(value=0)
             min_widget, min_extra = make_slider(min_var)
             max_var: tk.Variable = tk.IntVar(value=0)
             max_widget, max_extra = make_slider(max_var)
         else:
-            fixed_var = tk.StringVar(value="")
+            fixed_var = tk.StringVar(value=default if default is not None else "")
             fixed_widget = ctk.CTkEntry(sub, textvariable=fixed_var, width=160)
             fixed_extra = None
             min_var = tk.StringVar(value="")
@@ -884,6 +916,34 @@ class App(ctk.CTk):
         except queue.Empty:
             pass
         self.after(100, self._poll_logs)
+
+    def _poll_meters(self) -> None:
+        if not self._meter_poll_active or not self._engine:
+            return
+        from melee_shock.modes.meter import MeterMode
+
+        active_display_ports = set()
+        for player in self._engine.players.values():
+            meter_mode = next(
+                (m for m in player.modes if isinstance(m, MeterMode)), None
+            )
+            if meter_mode is None or meter_mode._other_port is None:
+                continue
+            display_port = meter_mode._other_port
+            active_display_ports.add(display_port)
+            frame = self._meter_frames.get(display_port)
+            bar = self._meter_bars.get(display_port)
+            lbl = self._meter_lbls.get(display_port)
+            if frame is None or bar is None or lbl is None:
+                continue
+            filled = int(meter_mode._meter // meter_mode.cfg.percent_per_bar)
+            frame.grid()
+            bar.set(meter_mode.meter_fraction)
+            lbl.configure(text=f"{filled} / {meter_mode.cfg.num_bars} bars")
+        for port, frame in self._meter_frames.items():
+            if port not in active_display_ports:
+                frame.grid_remove()
+        self.after(100, self._poll_meters)
 
     # ── config file ops ───────────────────────────────────────────────────────
 
@@ -1200,8 +1260,13 @@ class App(ctk.CTk):
             state="normal", fg_color="#c0392b", hover_color="#e74c3c"
         )
         self._populate_shockers()
+        self._meter_poll_active = True
+        self._poll_meters()
 
     def _ui_stopped(self) -> None:
+        self._meter_poll_active = False
+        for frame in self._meter_frames.values():
+            frame.grid_remove()
         self._unlock_settings()
         self._connect_btn.configure(state="normal")
         self._stop_btn.configure(state="disabled", fg_color="#555", hover_color="#666")

@@ -99,8 +99,8 @@ class App(ctk.CTk):
         self._player_modes_container: dict[int, ctk.CTkFrame] = {}
         self._player_global_mode_labels: dict[int, ctk.CTkLabel] = {}
         self._meter_frames: dict[int, ctk.CTkFrame] = {}
-        self._meter_bars: dict[int, ctk.CTkProgressBar] = {}
-        self._meter_lbls: dict[int, ctk.CTkLabel] = {}
+        self._meter_bars: dict[int, list[ctk.CTkProgressBar]] = {}
+        self._meter_bar_counts: dict[int, int] = {}
         self._meter_poll_active = False
 
         self._setup_logging()
@@ -398,16 +398,10 @@ class App(ctk.CTk):
             mf.grid(
                 row=2, column=0, columnspan=3, sticky="ew", padx=(36, 8), pady=(0, 4)
             )
-            mf.grid_columnconfigure(0, weight=1)
-            bar = ctk.CTkProgressBar(mf)
-            bar.set(0)
-            bar.grid(row=0, column=0, sticky="ew", padx=(0, 8))
-            lbl = ctk.CTkLabel(mf, text="0 / 0 bars", width=90, anchor="w")
-            lbl.grid(row=0, column=1)
             mf.grid_remove()
             self._meter_frames[port] = mf
-            self._meter_bars[port] = bar
-            self._meter_lbls[port] = lbl
+            self._meter_bars[port] = []
+            self._meter_bar_counts[port] = 0
 
             out_var.trace_add(
                 "write", lambda *_, p=port: self._on_player_output_changed(p)
@@ -932,14 +926,37 @@ class App(ctk.CTk):
             display_port = meter_mode._other_port
             active_display_ports.add(display_port)
             frame = self._meter_frames.get(display_port)
-            bar = self._meter_bars.get(display_port)
-            lbl = self._meter_lbls.get(display_port)
-            if frame is None or bar is None or lbl is None:
+            if frame is None:
                 continue
-            filled = int(meter_mode._meter // meter_mode.cfg.percent_per_bar)
+
+            num_bars = meter_mode.cfg.num_bars
+            if self._meter_bar_counts.get(display_port) != num_bars:
+                for w in frame.winfo_children():
+                    w.destroy()
+                bars = []
+                for i in range(num_bars):
+                    frame.grid_columnconfigure(i, weight=1)
+                    b = ctk.CTkProgressBar(frame, height=14)
+                    b.set(0)
+                    b.grid(
+                        row=0,
+                        column=i,
+                        sticky="ew",
+                        padx=(0, 4) if i < num_bars - 1 else 0,
+                    )
+                    bars.append(b)
+                self._meter_bars[display_port] = bars
+                self._meter_bar_counts[display_port] = num_bars
+
             frame.grid()
-            bar.set(meter_mode.meter_fraction)
-            lbl.configure(text=f"{filled} / {meter_mode.cfg.num_bars} bars")
+            meter = meter_mode._meter
+            ppb = meter_mode.cfg.percent_per_bar
+            for i, b in enumerate(self._meter_bars.get(display_port, [])):
+                fraction = max(
+                    0.0, min(1.0, (meter - i * ppb) / ppb if ppb > 0 else 0.0)
+                )
+                b.set(fraction)
+
         for port, frame in self._meter_frames.items():
             if port not in active_display_ports:
                 frame.grid_remove()
@@ -1265,8 +1282,12 @@ class App(ctk.CTk):
 
     def _ui_stopped(self) -> None:
         self._meter_poll_active = False
-        for frame in self._meter_frames.values():
+        for port, frame in self._meter_frames.items():
             frame.grid_remove()
+            for w in frame.winfo_children():
+                w.destroy()
+            self._meter_bars[port] = []
+            self._meter_bar_counts[port] = 0
         self._unlock_settings()
         self._connect_btn.configure(state="normal")
         self._stop_btn.configure(state="disabled", fg_color="#555", hover_color="#666")

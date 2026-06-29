@@ -332,8 +332,8 @@ Output in `dist/melee-shock/`.
 
 ## Thanks
 
-- **Michael** - testing online play
-- **Beta Testers** - Gwen, River, Viv, Zoe
+- **Michael** - online play tests
+- **Gwen, River, Viv, Zoe** - beta testers
 
 ## License
 

@@ -33,6 +33,7 @@ MODE_NAMES = ["damage", "interval", "action"]
 MODE_FIELDS: dict[str, list[tuple[str, str, str, str | None]]] = {
     "damage": [
         ("max_intensity", "Max intensity", "intensity", None),
+        ("min_intensity", "Min intensity", "intensity", None),
         ("min_duration", "Min duration (s)", "float", "0"),
     ],
     "interval": [

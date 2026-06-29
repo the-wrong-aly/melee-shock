@@ -18,6 +18,7 @@ class DamageMode(BaseMode):
     class Config(BaseModel):
         name: str = "damage"
         max_intensity: int
+        min_intensity: int = 1
         min_duration: float = 0
 
     def __init__(self, cfg: Config):
@@ -36,16 +37,13 @@ class DamageMode(BaseMode):
         percent = player_state.percent
         if self._current_percent is not None and percent > self._current_percent:
             # player was hit
+            raw = (percent - self._current_percent) / MAX_DAMAGE_MOVE
+            intensity = int(
+                self.cfg.min_intensity
+                + raw * (self.cfg.max_intensity - self.cfg.min_intensity)
+            )
             intensity = max(
-                1,
-                min(
-                    int(
-                        (percent - self._current_percent)
-                        / MAX_DAMAGE_MOVE
-                        * self.cfg.max_intensity
-                    ),
-                    self.cfg.max_intensity,
-                ),
+                self.cfg.min_intensity, min(intensity, self.cfg.max_intensity)
             )
             duration = max(
                 int(self.cfg.min_duration * 1000),

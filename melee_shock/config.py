@@ -2,7 +2,6 @@ import tomllib
 from pathlib import Path
 from pydantic import BaseModel, field_validator
 from melee_shock.modes.registry import get as get_mode
-from melee_shock.modes.base import BaseMode
 
 
 VALID_OUTPUT_MODES = ("shock", "vibrate", "disabled")

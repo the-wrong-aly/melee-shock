@@ -14,7 +14,7 @@ from melee_shock.sources.base import BaseSource
 logger = logging.getLogger(__name__)
 
 
-KILL_BUTTON = melee.Button.BUTTON_D_LEFT
+KILL_BUTTON = melee.Button.BUTTON_START
 PING_BUTTON = melee.Button.BUTTON_D_RIGHT
 
 

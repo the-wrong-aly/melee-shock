@@ -11,16 +11,17 @@ Real-time haptic feedback for Super Smash Bros. Melee. Monitors live game state 
 - Always follow [PiShock's safety guidelines](https://pishock.com). Do not use around the neck, spine, or chest. Do not use with any heart conditions.
 - `melee-shock` is not responsible for any harm caused by misuse of the PiShock device
 - Set max intensity to a conservative value before your first session
-- The in-game kill switch (D-Pad Left) immediately stops output
+- The in-game kill switch (Start) immediately stops output
 
 ## Features
 
 - **Damage mode** - triggers feedback when your character takes damage; intensity scales with damage dealt, duration matches hitstun frames
 - **Interval mode** - triggers feedback on a fixed time interval
 - **Action mode** - triggers feedback when your character enters a specific action state (e.g. shielding, grabbing)
+- **Meter mode** - you earn meter by taking damage (and optionally taunting); you spend a bar with D-Pad Down to shock your opponent
 - **Per-player configuration** - each player slot can have multiple modes and its own output type
 - **Output modes** - `vibrate`, `shock`, or `disabled` per player
-- **In-game controls** - D-Pad Left kills the shock switch; D-Pad Right sends a ping
+- **In-game controls** - Start kills the shock switch; D-Pad Right sends a ping
 
 ## Requirements
 
@@ -71,6 +72,16 @@ All settings are locked while running. Hit **Stop** to end the session.
 | Action(s) | Action state name(s) from [`melee.Action`](https://libmelee.readthedocs.io/en/latest/enums.html) (e.g. `SHIELD`, `GRAB`) - comma-separated in the GUI |
 | Intensity | Fixed intensity (0-100) |
 | Repeat while held | If enabled, shocks continuously while the action is active; otherwise shocks once on entry |
+
+**`meter`** - You gain meter when taking damage (and optionally by taunting). When you have at least one full bar, you can press D-Pad Down to spend it and shock your opponent. 2-player only.
+
+| Parameter | Description |
+|---|---|
+| Intensity | Shock intensity (0-100) |
+| Duration | Shock duration in seconds |
+| Num bars | Maximum meter bars you can accumulate |
+| Percent per bar | Damage needed to fill one bar (default: 100) |
+| Taunt meter | Meter awarded for completing a taunt (default: 0) |
 
 ## Online Play
 
@@ -249,6 +260,15 @@ intensity = 20
 [players.2]
 output_mode = "vibrate"
 # no [[players.2.modes]] — falls back to the global [[modes]]
+
+# Meter mode example: P1 gets shocked when P2 deals enough damage and presses D-Pad Down
+# [[players.1.modes]]
+# name = "meter"
+# intensity = 30
+# duration = 1.0
+# num_bars = 3
+# percent_per_bar = 100
+# taunt_meter = 0
 ```
 
 **Wii console:**
@@ -307,12 +327,13 @@ Output in `dist/melee-shock/`.
 ## TODO
 
 - [x] Wii console support
-- [ ] Charge meter mode
+- [x] Charge meter mode
 - [ ] Better support for online opponents
 
 ## Thanks
 
 - **Michael** - testing online play
+- **Beta Testers** - Gwen, River, Viv, Zoe
 
 ## License
 
